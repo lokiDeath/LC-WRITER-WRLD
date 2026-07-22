@@ -1,0 +1,611 @@
+// L-C (Lucian Creation) — Novel Writing OS schema
+// PostgreSQL-compatible (works with Supabase, Neon, Render, etc.)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// CORE: USER + AUTH
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id                  String   @id @default(cuid())
+  loginId             String   @unique
+  passwordHash        String
+  displayName         String
+  email               String?  @unique
+  role                String   @default("CLIENT")
+  avatar              String?  // data URL or remote URL
+  writingStatus       String   @default("Writing") // Writing | Editing | Planning
+  ascensionTier       Int      @default(0) // 0=Apprentice ... 5=Author Progenitor
+  attunement          Int      @default(0) // 0-100 progress to next tier
+  isBanned            Boolean  @default(false)
+  isSuspended         Boolean  @default(false)
+  voiceEnabled        Boolean  @default(false)
+  ageVerified         Boolean  @default(false)
+  hiddenModeUnlocked  Boolean  @default(false)
+  hiddenModeCode      String?
+  bio                 String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  sessions            Session[]
+  settings            UserSettings?
+  linkedAccounts      LinkedAccount[]
+  ownedHubs           Hub[]      @relation("HubOwner")
+  hubMemberships      HubMember[]
+  hubMessages         HubMessage[]
+  conversations       ConversationMember[]
+  sentMessages        DirectMessage[] @relation("MessageSender")
+  projects            Project[]
+  auditLogs           AuditLog[]  @relation("AuditActor")
+
+  // Legacy novel-related (kept from earlier iteration)
+  novels              Novel[]
+  characters          Character[]
+  chatSessions        ChatSession[]
+  communityMsgs       CommunityMessage[]
+  tradeListings       TradeListing[]
+  ideas               Idea[]
+  worldElements       WorldElement[]
+  cultivationRealms   CultivationRealm[]
+  magicElements       MagicElement[]
+  timelineEvents      TimelineEvent[]
+  relationships       Relationship[]
+  plotThreads         PlotThread[]
+  foreshadows         Foreshadow[]
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  token       String   @unique
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// USER SETTINGS (one row per user, JSON blob for flexibility)
+// ─────────────────────────────────────────────────────────────
+
+model UserSettings {
+  userId              String   @id
+  // General
+  appearance          String   @default("Dark")
+  accentColor         String   @default("Default")
+  language            String   @default("English (US)")
+  startupBehavior     String   @default("Open last active Hub/DM")
+  sendWithEnter       Boolean  @default(true)
+  autoSaveDocs        Boolean  @default(true)
+  smartReadingCompanion Boolean @default(false)
+  aiChatMemoryAutoload Boolean @default(false)
+  allowIncomingCalls  Boolean  @default(true)
+  showCallAlerts      Boolean  @default(true)
+  showMessagePreviews Boolean  @default(true)
+  reactionNotifications Boolean @default(false)
+  // Notifications
+  notifHubs           String   @default("Push")
+  notifSharedProjects String   @default("Both")
+  notifProjectAnalysis String  @default("Push")
+  notifAIArt          String   @default("Push")
+  notifLoreGap        String   @default("Off")
+  notifProductUpdates String   @default("Email")
+  notifFeedbackEmails String   @default("Email")
+  // Personalization
+  personalAccent      String   @default("Shadow Purple")
+  editorFontFamily    String   @default("Serif (Novel Standard)")
+  editorFontSize      String   @default("16px")
+  lineSpacing         String   @default("1.5 (Recommended)")
+  compactMode         Boolean  @default(false)
+  reduceMotion        Boolean  @default(false)
+  critiqueSeverity    String   @default("Balanced (Constructive logic)")
+  loreAdherence       String   @default("Strict Lore Match")
+  globalDirectives    String   @default("")
+  // Privacy
+  showOnlineStatus    Boolean  @default(true)
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// EXTERNAL LINKED ACCOUNTS (Google, OneNote, GitHub, Discord)
+// ─────────────────────────────────────────────────────────────
+
+model LinkedAccount {
+  id              String   @id @default(cuid())
+  userId          String
+  provider        String   // "google" | "onenote" | "github" | "discord"
+  providerAccountId String?
+  accessToken     String?
+  refreshToken    String?
+  connected       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// THE GUILD: HUBS + MESSAGES (community chat rooms)
+// ─────────────────────────────────────────────────────────────
+
+model Hub {
+  id              String   @id @default(cuid())
+  name            String
+  avatarInitial   String   @default("⌘")
+  isTheHub        Boolean  @default(false) // The permanent VIP showroom
+  isArchived      Boolean  @default(false)
+  ownerId         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  owner      User        @relation("HubOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members    HubMember[]
+  messages   HubMessage[]
+
+  @@index([ownerId])
+  @@index([isArchived])
+}
+
+model HubMember {
+  id        String   @id @default(cuid())
+  hubId     String
+  userId    String
+  role      String   @default("member") // "admin" | "scribe" | "member"
+  muted     Boolean  @default(false)
+  pinned    Boolean  @default(false)
+  favorited Boolean  @default(false)
+  lastReadAt DateTime?
+  joinedAt  DateTime @default(now())
+
+  hub  Hub  @relation(fields: [hubId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([hubId, userId])
+  @@index([userId])
+}
+
+model HubMessage {
+  id          String   @id @default(cuid())
+  hubId       String
+  senderId    String
+  content     String   @default("")
+  replyToId   String?
+  attachmentName String?
+  attachmentType String? // "image" | "gif" | "file"
+  attachmentUrl String?
+  isStarred   Boolean  @default(false)
+  isSystemLog Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  hub     Hub         @relation(fields: [hubId], references: [id], onDelete: Cascade)
+  sender  User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo HubMessage? @relation("HubMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies HubMessage[] @relation("HubMessageReply")
+  reactions  MessageReaction[] @relation("HubMessageReactions")
+
+  @@index([hubId, createdAt])
+  @@index([senderId])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  // Polymorphic-ish: reaction belongs to either a hub message or a direct message.
+  // We use a `kind` field to discriminate.
+  kind      String   @default("hub") // "hub" | "dm"
+
+  hubMessage   HubMessage?   @relation("HubMessageReactions", fields: [messageId], references: [id], onDelete: Cascade, map: "MessageReaction_hubMessageId_fkey")
+  directMessage DirectMessage? @relation("DMReactions", fields: [messageId], references: [id], onDelete: Cascade, map: "MessageReaction_directMessageId_fkey")
+
+  @@unique([messageId, userId, emoji, kind])
+  @@index([messageId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// THE CIRCLE: 1-ON-1 DIRECT MESSAGES
+// ─────────────────────────────────────────────────────────────
+
+model Conversation {
+  id          String   @id @default(cuid())
+  isArchived  Boolean  @default(false)
+  isPinned    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members   ConversationMember[]
+  messages  DirectMessage[]
+
+  @@index([isArchived])
+}
+
+model ConversationMember {
+  id              String   @id @default(cuid())
+  conversationId  String
+  userId          String
+  lastReadAt      DateTime?
+  muted           Boolean  @default(false)
+  favorited       Boolean  @default(false)
+  joinedAt        DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model DirectMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  senderId        String
+  content         String   @default("")
+  replyToId       String?
+  attachmentName  String?
+  attachmentType  String?
+  attachmentUrl   String?
+  receipt         String   @default("sent") // "sent" | "delivered" | "read"
+  isStarred       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User          @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo      DirectMessage? @relation("DMReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      DirectMessage[] @relation("DMReply")
+  reactions    MessageReaction[] @relation("DMReactions")
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROJECTS + 12 CORE TABS
+// ─────────────────────────────────────────────────────────────
+
+model Project {
+  id          String   @id @default(cuid())
+  ownerId     String
+  name        String
+  description String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner   User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tabs    ProjectTab[]
+
+  @@index([ownerId])
+}
+
+model ProjectTab {
+  id          String   @id @default(cuid())
+  projectId   String
+  tabKey      String   // "full-writing" | "character-creation" | "world-building" | etc.
+  title       String
+  content     String   @default("") // markdown / HTML
+  metadata    Json?
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, tabKey])
+  @@index([projectId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// LEGACY NOVEL MODELS (kept for backwards compatibility with earlier features)
+// ─────────────────────────────────────────────────────────────
+
+model Novel {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  genre       String?
+  status      String   @default("draft")
+  wordCount   Int      @default(0)
+  aiMode      String   @default("novel_partner")
+  authorId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  chapters    Chapter[]
+  characters  Character[]
+  chatSessions ChatSession[]
+  worldElements    WorldElement[]
+  cultivationRealms CultivationRealm[]
+  magicElements    MagicElement[]
+  timelineEvents   TimelineEvent[]
+  relationships    Relationship[]
+  plotThreads      PlotThread[]
+  foreshadows      Foreshadow[]
+  ideas            Idea[]
+}
+
+model Chapter {
+  id         String   @id @default(cuid())
+  novelId    String
+  title      String
+  content    String   @default("")
+  orderIndex Int      @default(0)
+  wordCount  Int      @default(0)
+  status     String   @default("draft")
+  pov        String?
+  arc        String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  novel Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
+}
+
+model Character {
+  id          String   @id @default(cuid())
+  name        String
+  alias       String?
+  role        String   @default("supporting")
+  age         String?
+  birthday    String?
+  race        String?
+  cultivation String?
+  powerLevel  String?
+  occupation  String?
+  appearance  String   @default("")
+  height      String?
+  weight      String?
+  hair        String?
+  eyes        String?
+  voice       String?
+  accent      String?
+  personality String   @default("")
+  likes       String?
+  dislikes   String?
+  habits      String?
+  goals       String?
+  secrets     String?
+  background  String   @default("")
+  abilities   String   @default("")
+  qi          String?
+  mana        String?
+  aether      String?
+  arc         String   @default("")
+  quotes      String?
+  inventory   String?
+  skills      String?
+  magic       String?
+  notes       String?
+  portraitUrl String?
+  authorId    String
+  novelId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  novel  Novel? @relation(fields: [novelId], references: [id], onDelete: SetNull)
+}
+
+model ChatSession {
+  id             String   @id @default(cuid())
+  userId         String
+  novelId        String?
+  title          String
+  mode           String
+  aiPersonality  String?
+  aiMode         String   @default("general")
+  isArchived     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  novel    Novel?        @relation(fields: [novelId], references: [id], onDelete: SetNull)
+  messages ChatMessage[]
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model CommunityMessage {
+  id        String   @id @default(cuid())
+  channel   String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TradeListing {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String
+  type        String
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WorldElement {
+  id          String   @id @default(cuid())
+  novelId     String
+  parentId    String?
+  name        String
+  type        String
+  description String   @default("")
+  lore        String   @default("")
+  imageUrl    String?
+  authorId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  novel    Novel         @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  author   User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent   WorldElement? @relation("WorldElementChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children WorldElement[] @relation("WorldElementChildren")
+}
+
+model CultivationRealm {
+  id                     String   @id @default(cuid())
+  novelId                String
+  name                   String
+  stage                  Int      @default(0)
+  requirements           String   @default("")
+  breakthroughConditions String   @default("")
+  failureChance          Int      @default(0)
+  energyType             String   @default("Qi")
+  description            String   @default("")
+  orderIndex             Int      @default(0)
+  authorId               String
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  novel  Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model MagicElement {
+  id           String   @id @default(cuid())
+  novelId      String
+  name         String
+  type         String   @default("Fire")
+  energyCost   String   @default("")
+  weaknesses   String   @default("")
+  strengths    String   @default("")
+  combinations String   @default("")
+  restrictions String   @default("")
+  description  String   @default("")
+  authorId     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  novel  Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model TimelineEvent {
+  id                String   @id @default(cuid())
+  novelId           String
+  year              String   @default("")
+  month             String   @default("")
+  day               String   @default("")
+  hour              String   @default("")
+  event             String
+  charactersPresent String   @default("")
+  location          String   @default("")
+  itemsUsed         String   @default("")
+  weather           String   @default("")
+  deaths            String   @default("")
+  births            String   @default("")
+  notes             String   @default("")
+  orderIndex        Int      @default(0)
+  authorId          String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  novel  Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model Relationship {
+  id              String   @id @default(cuid())
+  novelId         String
+  fromCharacterId String
+  toCharacterId   String
+  type            String
+  description     String   @default("")
+  authorId        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  novel  Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model PlotThread {
+  id          String   @id @default(cuid())
+  novelId     String
+  title       String
+  type        String   @default("main")
+  status      String   @default("open")
+  importance  Int      @default(3)
+  description String   @default("")
+  authorId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  novel  Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model Foreshadow {
+  id                  String   @id @default(cuid())
+  novelId             String
+  clue                String
+  introducedInChapter String?
+  paidOff             Boolean  @default(false)
+  paidOffInChapter    String?
+  status              String   @default("open")
+  notes               String   @default("")
+  authorId            String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  novel  Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model Idea {
+  id        String   @id @default(cuid())
+  userId    String
+  novelId   String?
+  title     String
+  content   String   @default("")
+  category  String   @default("scene")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  novel Novel? @relation(fields: [novelId], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  detail    String?
+  createdAt DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+}
