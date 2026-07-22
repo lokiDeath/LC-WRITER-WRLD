@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
-  ChevronDown,
   Mic,
   ArrowUp,
   FileText,
@@ -14,15 +13,21 @@ import {
   MicVocal,
   Search,
   Settings as SettingsIcon,
-  Sparkles,
-  Zap,
-  Brain,
   Expand,
   X,
   ChevronLeft,
   ImageIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+// ─────────────────────────────────────────────────────────────
+// NOTE: Per spec, the Main Chat MUST NOT have a model selector.
+// The model is hardcoded on the backend to gemini-1.5-flash for the
+// main chat and gemini-1.5-pro for the Project Co-Pilot. The
+// AIModel type is kept only for backwards compatibility with
+// callers that still pass selectedModel/onModelChange props, but
+// the dropdown UI has been removed.
+// ─────────────────────────────────────────────────────────────
 
 export type AIModel = {
   id: string
@@ -32,12 +37,9 @@ export type AIModel = {
   color: string
 }
 
-// Exactly 4 options per spec: ⚡ 3.1 Flash-Lite, ⚡ 3.5 Flash, 🧠 3.1 Pro, 🔍 Extended Thinking
+// Kept for backwards compatibility — no longer rendered in the UI.
 export const AI_MODELS: AIModel[] = [
-  { id: 'flash-lite', name: '⚡ 3.1 Flash-Lite', icon: Sparkles, desc: 'Fastest answers', color: 'text-zinc-400' },
-  { id: 'flash', name: '⚡ 3.5 Flash', icon: Zap, desc: 'All-around help', color: 'text-amber-400' },
-  { id: 'pro', name: '🧠 3.1 Pro', icon: Brain, desc: 'Advanced reasoning and code', color: 'text-blue-400' },
-  { id: 'thinking', name: '🔍 Extended Thinking', icon: Search, desc: 'Complex problem solving', color: 'text-purple-400' },
+  { id: 'flash-lite', name: '3.1 Flash-Lite', icon: SettingsIcon, desc: 'Fastest answers', color: 'text-zinc-400' },
 ]
 
 const ATTACH_OPTIONS = [
@@ -51,24 +53,36 @@ const ATTACH_OPTIONS = [
   { id: 'learning', label: 'Guided Learning', icon: SettingsIcon },
 ]
 
-type UploadedImage = { id: string; url: string; name: string }
+export type UploadedImage = {
+  id: string
+  url: string // blob URL for preview
+  name: string
+  base64: string // raw base64 string (no data: prefix) for sending to Gemini
+  mimeType: string
+}
 
 type ChatInputProps = {
   value: string
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   onSend: () => void
-  selectedModel: AIModel
-  onModelChange: (model: AIModel) => void
+  // Kept for backwards compat — no longer used internally.
+  selectedModel?: AIModel | null
+  onModelChange?: (model: AIModel) => void
   isListening: boolean
   onToggleVoice: () => void
   isNewChat: boolean
   ghostText: string
   lineCount: number
   disabled?: boolean
-  // Optional overrides (kept for backward compat; not used internally for the modal)
   isExpanded?: boolean
   onToggleExpand?: () => void
+  // NEW: called when the user attaches/removes images so the parent
+  // can include them in the send payload. Passes the current array.
+  onImagesChange?: (images: UploadedImage[]) => void
+  // NEW: called by the parent after a successful send to clear the
+  // image carousel in this child component.
+  clearImagesSignal?: number
 }
 
 export function ChatInput({
@@ -76,8 +90,8 @@ export function ChatInput({
   onChange,
   onKeyDown,
   onSend,
-  selectedModel,
-  onModelChange,
+  selectedModel: _selectedModel,
+  onModelChange: _onModelChange,
   isListening,
   onToggleVoice,
   isNewChat,
@@ -86,9 +100,10 @@ export function ChatInput({
   disabled,
   isExpanded: _isExpanded,
   onToggleExpand: _onToggleExpand,
+  onImagesChange,
+  clearImagesSignal,
 }: ChatInputProps) {
   const [showAttachMenu, setShowAttachMenu] = useState(false)
-  const [showModelDropdown, setShowModelDropdown] = useState(false)
   const [showVoiceTooltip, setShowVoiceTooltip] = useState(false)
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([])
   const [carouselIndex, setCarouselIndex] = useState(0)
@@ -102,6 +117,19 @@ export function ChatInput({
   // Spec: hidden for 1, 2, 3 lines; visible only when more than 3 lines typed
   const showExpandButton = lineCount > 3
 
+  // Notify parent whenever images change
+  useEffect(() => {
+    onImagesChange?.(uploadedImages)
+  }, [uploadedImages, onImagesChange])
+
+  // Parent signals clear (e.g. after send) by bumping clearImagesSignal
+  useEffect(() => {
+    if (clearImagesSignal && clearImagesSignal > 0) {
+      setUploadedImages([])
+      setCarouselIndex(0)
+    }
+  }, [clearImagesSignal])
+
   // Sync expanded text when modal opens
   useEffect(() => {
     if (showExpandModal) {
@@ -114,7 +142,30 @@ export function ChatInput({
     setTimeout(() => setToast(null), 3000)
   }
 
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  // ─── Convert a File to base64 (raw, no data: prefix) ───
+  function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result
+        if (typeof result !== 'string') {
+          reject(new Error('FileReader returned non-string'))
+          return
+        }
+        // Strip "data:<mime>;base64," prefix
+        const match = result.match(/^data:([^;]+);base64,(.+)$/)
+        if (!match) {
+          reject(new Error('Invalid data URL'))
+          return
+        }
+        resolve({ base64: match[2], mimeType: match[1] })
+      }
+      reader.onerror = () => reject(reader.error || new Error('FileReader error'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files) return
 
@@ -129,19 +180,39 @@ export function ChatInput({
       return
     }
 
-    const newImages: UploadedImage[] = imageFiles.map((file, i) => ({
-      id: `img_${Date.now()}_${i}`,
-      url: URL.createObjectURL(file),
-      name: file.name,
-    }))
+    // Convert each file to base64 in parallel
+    const newImages: UploadedImage[] = []
+    for (const file of imageFiles) {
+      try {
+        const { base64, mimeType } = await fileToBase64(file)
+        newImages.push({
+          id: `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          url: URL.createObjectURL(file),
+          name: file.name,
+          base64,
+          mimeType,
+        })
+      } catch (err) {
+        console.error('fileToBase64 error:', err)
+        showToast(`Failed to read ${file.name}`)
+      }
+    }
 
-    setUploadedImages((prev) => [...prev, ...newImages])
-    setCarouselIndex(uploadedImages.length) // jump to first new image
+    if (newImages.length > 0) {
+      setUploadedImages((prev) => [...prev, ...newImages])
+      setCarouselIndex(uploadedImages.length) // jump to first new image
+    }
     e.target.value = ''
   }
 
   function removeImage(id: string) {
-    setUploadedImages((prev) => prev.filter((img) => img.id !== id))
+    setUploadedImages((prev) => {
+      const next = prev.filter((img) => img.id !== id)
+      // Revoke the blob URL to free memory
+      const removed = prev.find((img) => img.id === id)
+      if (removed) URL.revokeObjectURL(removed.url)
+      return next
+    })
     setCarouselIndex(0)
   }
 
@@ -153,13 +224,15 @@ export function ChatInput({
   }
 
   function saveExpandedText() {
-    // Sync the expanded text back to the parent chat input via a synthetic event
     const syntheticEvent = {
       target: { value: expandedText },
     } as React.ChangeEvent<HTMLTextAreaElement>
     onChange(syntheticEvent)
     setShowExpandModal(false)
   }
+
+  // The send button should be enabled when there's text OR at least one image.
+  const canSend = (value.trim() || uploadedImages.length > 0) && !disabled
 
   return (
     <div className="shrink-0 px-4 md:px-8 pb-4 pt-2">
@@ -188,7 +261,7 @@ export function ChatInput({
                 >
                   {uploadedImages.map((img) => (
                     <div key={img.id} className="relative shrink-0 group">
-                      { }
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={img.url}
                         alt={img.name}
@@ -268,10 +341,7 @@ export function ChatInput({
               {/* Plus / Attach menu */}
               <div className="relative">
                 <button
-                  onClick={() => {
-                    setShowAttachMenu(!showAttachMenu)
-                    setShowModelDropdown(false)
-                  }}
+                  onClick={() => setShowAttachMenu(!showAttachMenu)}
                   className="p-2 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition"
                   title="Add"
                   disabled={disabled}
@@ -319,78 +389,14 @@ export function ChatInput({
                 )}
               </div>
 
-              {/* Model selector dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => {
-                    setShowModelDropdown(!showModelDropdown)
-                    setShowAttachMenu(false)
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition"
-                >
-                  <selectedModel.icon className={cn('w-3.5 h-3.5', selectedModel.color)} />
-                  <span className="hidden sm:inline">{selectedModel.name}</span>
-                  <ChevronDown className="w-3 h-3 opacity-60" />
-                </button>
-
-                {showModelDropdown && (
-                  <>
-                    <div className="fixed inset-0 z-[10000]" onClick={() => setShowModelDropdown(false)} />
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="absolute bottom-full left-0 mb-2 w-72 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-[10001] overflow-hidden"
-                    >
-                      <div className="px-3 py-2 border-b border-zinc-800">
-                        <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-600">Select Model</p>
-                      </div>
-                      <div className="py-1">
-                        {AI_MODELS.map((model) => (
-                          <button
-                            key={model.id}
-                            onClick={() => {
-                              onModelChange(model)
-                              setShowModelDropdown(false)
-                            }}
-                            className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-zinc-800 transition text-left"
-                          >
-                            <div
-                              className={cn(
-                                'w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0',
-                                selectedModel.id === model.id && 'bg-zinc-700'
-                              )}
-                            >
-                              <model.icon className={cn('w-4 h-4', model.color)} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="text-[13px] font-medium text-zinc-200 truncate">{model.name}</p>
-                                {selectedModel.id === model.id && (
-                                  <svg
-                                    className="w-3.5 h-3.5 text-zinc-400 shrink-0"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    strokeWidth={2}
-                                  >
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                  </svg>
-                                )}
-                              </div>
-                              <p className="text-[10px] text-zinc-600 mt-0.5 leading-snug">{model.desc}</p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  </>
-                )}
-              </div>
+              {/* NOTE: Model selector dropdown has been REMOVED per spec.
+                  The Main Chat is hardcoded to gemini-1.5-flash on the backend.
+                  The Project Co-Pilot is hardcoded to gemini-1.5-pro on the backend. */}
             </div>
 
             {/* Right controls */}
             <div className="flex items-center gap-1.5">
-              {/* Expand button — only shows when text > 3 lines. Opens a full-screen modal. */}
+              {/* Expand button — only shows when text > 3 lines */}
               {showExpandButton && (
                 <button
                   onClick={() => setShowExpandModal(true)}
@@ -424,13 +430,13 @@ export function ChatInput({
                 )}
               </div>
 
-              {/* Submit button */}
+              {/* Submit button — enabled when text OR images are present */}
               <button
                 onClick={onSend}
-                disabled={!value.trim() || disabled}
+                disabled={!canSend}
                 className={cn(
                   'p-2 rounded-lg transition',
-                  value.trim() && !disabled
+                  canSend
                     ? 'bg-red-500 text-white hover:bg-red-600'
                     : 'bg-zinc-800 text-zinc-700 cursor-not-allowed'
                 )}
@@ -444,7 +450,7 @@ export function ChatInput({
 
         {/* Footer */}
         <p className="text-[10px] text-zinc-700 text-center mt-2">
-          All models can make mistakes. Verify important information.
+          AI responses may be inaccurate. Verify important information.
         </p>
       </div>
 

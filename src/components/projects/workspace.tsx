@@ -285,8 +285,9 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // Hardcoded model label: backend resolves this to gemini-3.1-pro-preview for Project Co-Pilot.
-          model: '3.1 Pro',
+          // Project Co-Pilot: hardcoded to gemini-1.5-pro + novel-writer
+          // system prompt on the backend via purpose: 'copilot'.
+          purpose: 'copilot',
           messages: [...messages.filter((m) => m.id !== 'greeting'), userMsg].map((m) => ({
             role: m.role,
             content: m.content,
@@ -304,16 +305,32 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
           },
         }),
       })
-      const data = await res.json()
-      const aiText =
-        data?.reply ||
-        data?.message?.content ||
-        data?.content ||
-        (data?.error ? `Error: ${data.error}` : 'No response received from the model.')
-      setMessages((prev) => [
-        ...prev,
-        { id: `a_${Date.now()}`, role: 'assistant', content: aiText },
-      ])
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || `AI request failed with ${res.status}`)
+      }
+
+      // The /api/chat endpoint streams plain text. Read the stream and
+      // accumulate the response into a single assistant message.
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('The AI service did not return a readable stream.')
+
+      const decoder = new TextDecoder()
+      const assistantId = `a_${Date.now()}`
+      setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '' }])
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        if (!chunk) continue
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId ? { ...msg, content: msg.content + chunk } : msg
+          )
+        )
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,

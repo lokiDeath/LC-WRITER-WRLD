@@ -24,11 +24,16 @@ export async function POST(req: NextRequest) {
     const user = await getCurrentUser(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const body = await req.json().catch(() => ({}))
-    const { title, mode, novelId, aiPersonality, aiMode } = body
-    if (!title || !mode) return NextResponse.json({ error: 'title and mode required.' }, { status: 400 })
-    if (mode === 'hidden' && !user.hiddenModeUnlocked) return NextResponse.json({ error: 'Hidden Mode not unlocked.' }, { status: 403 })
+    const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : 'New Chat'
+    const mode = typeof body.mode === 'string' && body.mode ? body.mode : 'main'
+    const novelId = typeof body.novelId === 'string' ? body.novelId : null
+    const aiPersonality = typeof body.aiPersonality === 'string' ? body.aiPersonality : null
+    const aiMode = typeof body.aiMode === 'string' ? body.aiMode : 'general'
+    if (mode === 'hidden' && !user.hiddenModeUnlocked) {
+      return NextResponse.json({ error: 'Hidden Mode not unlocked.' }, { status: 403 })
+    }
     const session = await db.chatSession.create({
-      data: { userId: user.id, title, mode, novelId: novelId || null, aiPersonality: aiPersonality || null, aiMode: aiMode || 'general' },
+      data: { userId: user.id, title, mode, novelId, aiPersonality, aiMode },
     })
     return NextResponse.json({ session })
   } catch (err) {

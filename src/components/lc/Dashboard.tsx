@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '@/lib/store'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -38,8 +38,28 @@ const NAV_ITEMS: { id: NavPage; label: string; translationKey: TranslationKey; i
 ]
 
 // No dummy chats — the sidebar starts empty for fresh accounts.
-// Real chats will be loaded from /api/chat/sessions in a future iteration.
-const DUMMY_CHATS: { id: string; name: string; time: string }[] = []
+// Real chats are loaded from /api/chat/sessions on mount.
+type ChatSummary = { id: string; name: string; time: string }
+
+// Format an ISO timestamp as a short relative time string ("Just now", "5m", "2h", "Yesterday", "Jun 5").
+function formatRelativeTime(iso: string): string {
+  try {
+    const d = new Date(iso)
+    const now = Date.now()
+    const diffMs = now - d.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    if (diffMin < 1) return 'Just now'
+    if (diffMin < 60) return `${diffMin}m`
+    const diffHr = Math.floor(diffMin / 60)
+    if (diffHr < 24) return `${diffHr}h`
+    const diffDay = Math.floor(diffHr / 24)
+    if (diffDay === 1) return 'Yesterday'
+    if (diffDay < 7) return `${diffDay}d`
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  } catch {
+    return ''
+  }
+}
 
 export function Dashboard() {
   const user = useApp((s) => s.user)
@@ -50,7 +70,7 @@ export function Dashboard() {
   // Mobile: sidebar is hidden by default and opens as a slide-out overlay
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [activePage, setActivePage] = useState<NavPage>('newchat')
-  const [chatsExpanded, setChatsExpanded] = useState(false)
+  const [chatsExpanded, setChatsExpanded] = useState(true)
   const [selectedChat, setSelectedChat] = useState<string | null>(null)
   const [pinnedChats, setPinnedChats] = useState<Set<string>>(new Set())
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -60,6 +80,12 @@ export function Dashboard() {
   const [showProfile, setShowProfile] = useState(false)
   const [profileData, setProfileData] = useState<WriterProfile | null>(null)
   const [circlePrefillContactId, setCirclePrefillContactId] = useState<string | null>(null)
+
+  // ─── Chat state: list of recent chat sessions + the active session ───
+  const [recentChats, setRecentChats] = useState<ChatSummary[]>([])
+  const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(null)
+  // Bump this to force the ChatPage to reset (new chat button)
+  const [chatResetSignal, setChatResetSignal] = useState(0)
 
   // ─── Responsive default: tablet collapses to icons, desktop expanded ───
   useEffect(() => {
@@ -79,6 +105,35 @@ export function Dashboard() {
     window.addEventListener('resize', applyResponsiveDefaults)
     return () => window.removeEventListener('resize', applyResponsiveDefaults)
   }, [])
+
+  // ─── Fetch recent chat sessions from /api/chat/sessions ───
+  const refreshRecentChats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/chat/sessions?mode=main', { cache: 'no-store' })
+      if (!res.ok) return
+      const data = await res.json()
+      if (Array.isArray(data.sessions)) {
+        setRecentChats(
+          data.sessions.map((s: { id: string; title: string; updatedAt: string }) => ({
+            id: s.id,
+            name: s.title || 'Untitled',
+            time: formatRelativeTime(s.updatedAt),
+          }))
+        )
+      }
+    } catch {
+      // silent
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshRecentChats()
+    // Listen for the custom event dispatched by ChatPage when a new chat
+    // session is created on first send.
+    const handler = () => refreshRecentChats()
+    window.addEventListener('lc-chat-created', handler)
+    return () => window.removeEventListener('lc-chat-created', handler)
+  }, [refreshRecentChats])
 
   // ─── Onboarding Tour ───
   // Triggers only on the first login of a newly registered account.
@@ -127,8 +182,8 @@ export function Dashboard() {
     })
   }
 
-  const pinnedChatItems = DUMMY_CHATS.filter((c) => pinnedChats.has(c.id))
-  const regularChatItems = DUMMY_CHATS.filter((c) => !pinnedChats.has(c.id))
+  const pinnedChatItems = recentChats.filter((c) => pinnedChats.has(c.id))
+  const regularChatItems = recentChats.filter((c) => !pinnedChats.has(c.id))
   // Desktop: respect isFullscreen. Mobile/tablet: always show via overlay when toggled.
   const showSidebar = !isFullscreen || (activePage !== 'newchat' && activePage !== 'workspace')
 
@@ -142,10 +197,26 @@ export function Dashboard() {
   function handleNavClick(page: NavPage) {
     if (page === 'searchchat') {
       setShowSearchModal(true)
+    } else if (page === 'newchat') {
+      // "New Chat" nav click: reset the active chat session so the ChatPage
+      // starts a fresh conversation. Bump the reset signal to force the
+      // child ChatPage to clear its local state.
+      setActiveChatSessionId(null)
+      setSelectedChat(null)
+      setChatResetSignal((s) => s + 1)
+      setActivePage('newchat')
     } else {
       setActivePage(page)
     }
     // Auto-close mobile sidebar after nav selection
+    setMobileSidebarOpen(false)
+  }
+
+  // When a recent chat is clicked in the sidebar, set it as the active session.
+  function selectRecentChat(chatId: string) {
+    setActiveChatSessionId(chatId)
+    setSelectedChat(chatId)
+    setActivePage('newchat')
     setMobileSidebarOpen(false)
   }
 
@@ -281,7 +352,7 @@ export function Dashboard() {
                                   chat={chat}
                                   isSelected={selectedChat === chat.id}
                                   isPinned={true}
-                                  onClick={() => { setSelectedChat(chat.id); setActivePage('newchat') }}
+                                  onClick={() => selectRecentChat(chat.id)}
                                   onTogglePin={() => togglePin(chat.id)}
                                 />
                               ))}
@@ -299,7 +370,7 @@ export function Dashboard() {
                                 chat={chat}
                                 isSelected={selectedChat === chat.id}
                                 isPinned={false}
-                                onClick={() => { setSelectedChat(chat.id); setActivePage('newchat') }}
+                                onClick={() => selectRecentChat(chat.id)}
                                 onTogglePin={() => togglePin(chat.id)}
                               />
                             ))}
@@ -395,6 +466,8 @@ export function Dashboard() {
               <ChatPage
                 isFullscreen={isFullscreen}
                 onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+                sessionId={activeChatSessionId}
+                resetSignal={chatResetSignal}
               />
             )}
             {activePage === 'workspace' && activeProjectName && (
@@ -413,8 +486,8 @@ export function Dashboard() {
       <SearchModal
         isOpen={showSearchModal}
         onClose={() => setShowSearchModal(false)}
-        chats={DUMMY_CHATS}
-        onSelectChat={(chatId) => { setSelectedChat(chatId); setActivePage('newchat') }}
+        chats={recentChats}
+        onSelectChat={(chatId) => selectRecentChat(chatId)}
       />
 
       {/* ═══ PROFILE MODAL ═══ */}

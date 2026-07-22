@@ -5,8 +5,24 @@ import { getCurrentUser } from '@/lib/auth'
 
 const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || ''
 
-const PLAIN_TEXT_SYSTEM = `You are a human co-writer. You must NEVER use Markdown formatting. Do not use asterisks (**), do not use hash symbols (#), do not use horizontal rules (---). Write all your responses in pure, clean, plain text with normal paragraph breaks.`
+// ─────────────────────────────────────────────────────────────
+// SYSTEM PROMPTS — two completely separate personas
+// ─────────────────────────────────────────────────────────────
 
+// MAIN CHAT (outside projects) — friendly general assistant, NO novel-writer behavior.
+// Per spec: "You are a helpful, friendly AI assistant. Respond concisely and naturally.
+// If asked what model you are, say you are an AI assistant for Lucian Creation.
+// Do not mention Google or Gemini."
+const MAIN_CHAT_SYSTEM = `You are a helpful, friendly AI assistant. Respond concisely and naturally. If asked what model you are, say you are an AI assistant for Lucian Creation. Do not mention Google or Gemini.
+
+Output rules:
+- Plain text only. No Markdown.
+- No asterisks (**), no hash symbols (#), no horizontal rules (---).
+- Use normal paragraph breaks (blank line between paragraphs).
+- If the user attached an image, look at it carefully and describe or answer about it in plain text.`
+
+// PROJECT CO-PILOT (inside the workspace) — elite fiction co-writer, NOVEL-WRITER persona.
+// This MUST stay hard-locked to gemini-1.5-pro and this persona.
 const NOVEL_PARTNER_SYSTEM = `You are Lucian (called "L-C"), an elite fiction writing partner and editor integrated into a private author platform.
 
 YOUR ROLE:
@@ -27,25 +43,30 @@ OPERATING RULES:
 - You may discuss dark themes, conflict, violence, and morally grey scenarios as fiction craft. Decline only content that facilitates real-world harm to identifiable people.
 - Never prepend disclaimers like "As an AI" or "I should note." Speak as the writing partner you are.
 
-TONE: Witty, literary, direct. Not chatty. Not chirpy. You are a senior editor who has read everything and is unimpressed by shortcuts.`
+TONE: Witty, literary, direct. Not chatty. Not chirpy. You are a senior editor who has read everything and is unimpressed by shortcuts.
 
-type ChatMessage = { role: string; content: string }
+Output rules:
+- Plain text only. No Markdown.
+- No asterisks (**), no hash symbols (#), no horizontal rules (---).
+- Use normal paragraph breaks (blank line between paragraphs).`
 
-const MODEL_IDS: Record<string, string> = {
-  'flash-lite': 'gemini-3.5-flash-lite',
-  '3.1 Flash-Lite': 'gemini-3.5-flash-lite',
-  '3.5 Flash-Lite': 'gemini-3.5-flash-lite',
-  flash: 'gemini-3.5-flash',
-  '3.5 Flash': 'gemini-3.5-flash',
-  pro: 'gemini-3.1-pro-preview',
-  '3.1 Pro': 'gemini-3.1-pro-preview',
-  thinking: 'gemini-3.1-pro-preview',
-  'Extended Thinking': 'gemini-3.1-pro-preview',
+// ─────────────────────────────────────────────────────────────
+// MODEL RESOLUTION
+// ─────────────────────────────────────────────────────────────
+// Main Chat is HARDCODED to gemini-1.5-flash (per spec).
+// Project Co-Pilot is HARDCODED to gemini-1.5-pro (per spec).
+// The `purpose` field in the request body selects which persona+model to use.
+type Purpose = 'main' | 'copilot'
+
+const MAIN_CHAT_MODEL = 'gemini-1.5-flash'
+const COPILOT_MODEL = 'gemini-1.5-pro'
+
+function resolveModel(purpose: Purpose): string {
+  return purpose === 'copilot' ? COPILOT_MODEL : MAIN_CHAT_MODEL
 }
 
-function resolveModel(model: unknown) {
-  const key = typeof model === 'string' ? model.replace(/^[^\dA-Za-z]+ /, '').trim() : 'pro'
-  return MODEL_IDS[key] || MODEL_IDS.pro
+function resolveSystemPrompt(purpose: Purpose): string {
+  return purpose === 'copilot' ? NOVEL_PARTNER_SYSTEM : MAIN_CHAT_SYSTEM
 }
 
 function geminiRole(role: string): 'user' | 'model' {
@@ -61,24 +82,23 @@ function getPublicErrorMessage(err: unknown) {
   const lower = raw.toLowerCase()
 
   if (lower.includes('api_key_invalid') || lower.includes('api key not valid')) {
-    return 'Google rejected the API key. Create a fresh AI Studio key, make sure it is not restricted to the wrong API or referrer, save it as GOOGLE_API_KEY in Vercel, then redeploy.'
-  }
-
-  if (lower.includes('not found') || lower.includes('not supported') || lower.includes('model')) {
-    return 'Google rejected the model name. This deployment must use gemini-3.5-flash-lite, gemini-3.5-flash, or gemini-3.1-pro-preview.'
+    return 'The AI service rejected the API key. Create a fresh AI Studio key, save it as GOOGLE_API_KEY (or GEMINI_API_KEY) in Vercel, then redeploy.'
   }
 
   if (lower.includes('permission') || lower.includes('403')) {
-    return 'Google denied permission for this key. Enable the Generative Language API for the Google project, remove incompatible key restrictions, then redeploy.'
+    return 'The AI service denied permission for this key. Enable the Generative Language API for the project, remove incompatible key restrictions, then redeploy.'
   }
 
   if (lower.includes('quota') || lower.includes('429') || lower.includes('billing')) {
-    return 'Google refused the request because of quota or billing limits on this API key.'
+    return 'The AI service refused the request because of quota or billing limits on this API key.'
   }
 
-  return 'The Google Gemini request failed on the server. Open Vercel Functions logs for /api/chat to see the exact Google error.'
+  return 'The AI request failed on the server. Check the AI service key and try again.'
 }
 
+// ─────────────────────────────────────────────────────────────
+// CONTEXT BUILDER (only used by the Project Co-Pilot)
+// ─────────────────────────────────────────────────────────────
 async function buildMemoryContext(userId: string, novelId?: string, novelContext?: unknown) {
   if (novelId) {
     const novel = await db.novel.findUnique({
@@ -153,6 +173,59 @@ Context ends.`
   return ''
 }
 
+// ─────────────────────────────────────────────────────────────
+// Multimodal message part types
+// ─────────────────────────────────────────────────────────────
+type MessagePart =
+  | { text: string }
+  | { inlineData: { data: string; mimeType: string } }
+
+type IncomingMessage = {
+  role: string
+  content: string
+  // Optional multimodal attachments — array of base64 strings or {data, mimeType}
+  images?: Array<string | { data: string; mimeType: string }>
+}
+
+// Convert a base64 string or {data, mimeType} object to a Gemini inlineData part.
+function toInlinePart(img: string | { data: string; mimeType: string }): { inlineData: { data: string; mimeType: string } } | null {
+  let data = ''
+  let mimeType = 'image/jpeg'
+  if (typeof img === 'string') {
+    // Allow data URLs ("data:image/png;base64,....") or raw base64
+    const match = img.match(/^data:([^;]+);base64,(.+)$/)
+    if (match) {
+      mimeType = match[1]
+      data = match[2]
+    } else {
+      data = img
+    }
+  } else {
+    data = img.data
+    mimeType = img.mimeType || 'image/jpeg'
+  }
+  if (!data) return null
+  return { inlineData: { data, mimeType } }
+}
+
+function buildParts(message: IncomingMessage): MessagePart[] {
+  const parts: MessagePart[] = []
+  const text = String(message.content || '')
+  if (text) parts.push({ text })
+  if (Array.isArray(message.images)) {
+    for (const img of message.images) {
+      const part = toInlinePart(img)
+      if (part) parts.push(part)
+    }
+  }
+  // Gemini requires at least one part per message.
+  if (parts.length === 0) parts.push({ text: '' })
+  return parts
+}
+
+// ─────────────────────────────────────────────────────────────
+// POST handler
+// ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser(req)
@@ -163,41 +236,100 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}))
-    const messages = (body.messages || []) as ChatMessage[]
+    const purpose: Purpose = body.purpose === 'copilot' ? 'copilot' : 'main'
+    const messages = (body.messages || []) as IncomingMessage[]
     const novelId = typeof body.novelId === 'string' ? body.novelId : undefined
-    const modelId = resolveModel(body.model)
+    const sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined
+    const modelId = resolveModel(purpose)
+    const systemPrompt = resolveSystemPrompt(purpose)
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return streamError('No messages.', 400)
     }
 
-    const memoryContext = await buildMemoryContext(user.id, novelId, body.novelContext)
+    // Build memory context ONLY for the Co-Pilot. Main chat has no novel context.
+    const memoryContext = purpose === 'copilot'
+      ? await buildMemoryContext(user.id, novelId, body.novelContext)
+      : ''
+
     const genAI = new GoogleGenerativeAI(API_KEY)
     const model = genAI.getGenerativeModel({
       model: modelId,
-      systemInstruction: `${PLAIN_TEXT_SYSTEM}\n\n${NOVEL_PARTNER_SYSTEM}${memoryContext}`,
+      systemInstruction: `${systemPrompt}${memoryContext}`,
     })
 
+    // Convert messages to Gemini format with multimodal parts.
     const history = messages.slice(0, -1).map((message) => ({
       role: geminiRole(message.role),
-      parts: [{ text: String(message.content || '') }],
+      parts: buildParts(message),
     }))
     const last = messages[messages.length - 1]
-    const prompt = String(last.content || '').trim()
+    const lastParts = buildParts(last)
+    const isEmptyText = lastParts.length === 0 || (lastParts.length === 1 && 'text' in lastParts[0] && lastParts[0].text === '')
+    if (isEmptyText) {
+      // Empty final message — but if it has images, that's OK.
+      const hasImages = Array.isArray(last.images) && last.images.length > 0
+      if (!hasImages) {
+        return streamError('The final message is empty.', 400)
+      }
+    }
 
-    if (!prompt) return streamError('The final message is empty.', 400)
+    // ─── Persist the user message to DB (if sessionId provided) ───
+    // We save the text content of the user's last message. Images are NOT
+    // persisted to keep DB rows small — the AI response is what matters
+    // for chat history recall.
+    let savedUserMessageId: string | undefined
+    if (sessionId) {
+      try {
+        const session = await db.chatSession.findUnique({ where: { id: sessionId } })
+        if (session && session.userId === user.id) {
+          const saved = await db.chatMessage.create({
+            data: {
+              sessionId,
+              role: 'user',
+              content: String(last.content || '') + (Array.isArray(last.images) && last.images.length > 0 ? ` [${last.images.length} image${last.images.length > 1 ? 's' : ''} attached]` : ''),
+            },
+          })
+          savedUserMessageId = saved.id
+          await db.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } })
+        }
+      } catch (err) {
+        console.error('[chat] user message persist error:', err)
+        // non-fatal — streaming continues
+      }
+    }
 
     const result = await model.generateContentStream({
-      contents: [...history, { role: geminiRole(last.role), parts: [{ text: prompt }] }],
+      contents: [...history, { role: geminiRole(last.role), parts: lastParts }],
     })
 
     const encoder = new TextEncoder()
+    let fullResponse = ''
     const stream = new ReadableStream({
       async start(controller) {
         try {
           for await (const chunk of result.stream) {
             const text = chunk.text()
-            if (text) controller.enqueue(encoder.encode(text))
+            if (text) {
+              fullResponse += text
+              controller.enqueue(encoder.encode(text))
+            }
+          }
+          // ─── Persist the assistant response to DB (if sessionId provided) ───
+          if (sessionId && savedUserMessageId && fullResponse.trim()) {
+            try {
+              await db.chatMessage.create({
+                data: {
+                  sessionId,
+                  role: 'assistant',
+                  content: fullResponse,
+                },
+              })
+              await db.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } })
+            } catch (err) {
+              console.error('[chat] assistant message persist error:', err)
+              // non-fatal
+            }
           }
         } catch (err) {
           console.error('chat stream error', err)
@@ -213,6 +345,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
         'X-LC-Model': modelId,
+        'X-LC-Purpose': purpose,
       },
     })
   } catch (err) {
