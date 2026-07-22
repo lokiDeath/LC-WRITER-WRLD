@@ -5,25 +5,17 @@ import { getCurrentUser } from '@/lib/auth'
 
 const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || ''
 
-// ─────────────────────────────────────────────────────────────
-// SYSTEM PROMPTS — two completely separate personas
-// ─────────────────────────────────────────────────────────────
-
-// MAIN CHAT (outside projects) — friendly general assistant, NO novel-writer behavior.
-// Per spec: "You are a helpful, friendly AI assistant. Respond concisely and naturally.
-// If asked what model you are, say you are an AI assistant for Lucian Creation.
-// Do not mention Google or Gemini."
-const MAIN_CHAT_SYSTEM = `You are a helpful, friendly AI assistant. Respond concisely and naturally. If asked what model you are, say you are an AI assistant for Lucian Creation. Do not mention Google or Gemini.
+// ─── System Prompts ───
+// Main Chat: friendly general assistant (NOT a novel writer)
+const MAIN_CHAT_SYSTEM = `You are a helpful, friendly AI assistant for Lucian Creation. Respond concisely and naturally. If asked what model you are, say you are an AI assistant for Lucian Creation. Do not mention Google or Gemini.
 
 Output rules:
-- Plain text only. No Markdown.
+- Plain text only. No Markdown formatting.
 - No asterisks (**), no hash symbols (#), no horizontal rules (---).
-- Use normal paragraph breaks (blank line between paragraphs).
-- If the user attached an image, look at it carefully and describe or answer about it in plain text.`
+- Use normal paragraph breaks (blank line between paragraphs).`
 
-// PROJECT CO-PILOT (inside the workspace) — elite fiction co-writer, NOVEL-WRITER persona.
-// This MUST stay hard-locked to gemini-1.5-pro and this persona.
-const NOVEL_PARTNER_SYSTEM = `You are Lucian (called "L-C"), an elite fiction writing partner and editor integrated into a private author platform.
+// Project Co-Pilot: elite fiction co-writer (hard-locked, never changes)
+const COPILOT_SYSTEM = `You are Lucian (called "L-C"), an elite fiction writing partner and editor integrated into a private author platform.
 
 YOUR ROLE:
 - You are a professional co-author and developmental editor for novelists.
@@ -46,59 +38,48 @@ OPERATING RULES:
 TONE: Witty, literary, direct. Not chatty. Not chirpy. You are a senior editor who has read everything and is unimpressed by shortcuts.
 
 Output rules:
-- Plain text only. No Markdown.
+- Plain text only. No Markdown formatting.
 - No asterisks (**), no hash symbols (#), no horizontal rules (---).
 - Use normal paragraph breaks (blank line between paragraphs).`
 
-// ─────────────────────────────────────────────────────────────
-// MODEL RESOLUTION
-// ─────────────────────────────────────────────────────────────
-// Main Chat is HARDCODED to gemini-1.5-flash (per spec).
-// Project Co-Pilot is HARDCODED to gemini-1.5-pro (per spec).
-// The `purpose` field in the request body selects which persona+model to use.
-type Purpose = 'main' | 'copilot'
+// ─── Model IDs ───
+// Google deprecated gemini-1.5-* model names. Current valid names:
+// Main Chat: gemini-2.0-flash (fast, stable, widely available)
+// Co-Pilot:  gemini-2.5-pro (most capable, latest stable pro model)
+const MAIN_CHAT_MODEL = 'gemini-2.0-flash'
+const COPILOT_MODEL = 'gemini-2.5-pro'
 
-const MAIN_CHAT_MODEL = 'gemini-1.5-flash'
-const COPILOT_MODEL = 'gemini-1.5-pro'
+type Purpose = 'main' | 'copilot'
 
 function resolveModel(purpose: Purpose): string {
   return purpose === 'copilot' ? COPILOT_MODEL : MAIN_CHAT_MODEL
 }
 
 function resolveSystemPrompt(purpose: Purpose): string {
-  return purpose === 'copilot' ? NOVEL_PARTNER_SYSTEM : MAIN_CHAT_SYSTEM
+  return purpose === 'copilot' ? COPILOT_SYSTEM : MAIN_CHAT_SYSTEM
 }
 
 function geminiRole(role: string): 'user' | 'model' {
   return role === 'assistant' || role === 'model' ? 'model' : 'user'
 }
 
-function streamError(message: string, status: number) {
-  return NextResponse.json({ error: message }, { status })
+// ─── Error extraction ───
+// Surface the EXACT error message from Google — never replace it with a
+// generic string. The frontend needs to show the real error so the user
+// can diagnose API key issues, quota limits, model name problems, etc.
+function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    // GoogleGenerativeAI errors include the full HTTP response body
+    return err.message
+  }
+  if (typeof err === 'string') return err
+  if (err && typeof err === 'object' && 'message' in err) {
+    return String((err as { message: unknown }).message)
+  }
+  return 'Unknown error'
 }
 
-function getPublicErrorMessage(err: unknown) {
-  const raw = err instanceof Error ? err.message : String(err)
-  const lower = raw.toLowerCase()
-
-  if (lower.includes('api_key_invalid') || lower.includes('api key not valid')) {
-    return 'The AI service rejected the API key. Create a fresh AI Studio key, save it as GOOGLE_API_KEY (or GEMINI_API_KEY) in Vercel, then redeploy.'
-  }
-
-  if (lower.includes('permission') || lower.includes('403')) {
-    return 'The AI service denied permission for this key. Enable the Generative Language API for the project, remove incompatible key restrictions, then redeploy.'
-  }
-
-  if (lower.includes('quota') || lower.includes('429') || lower.includes('billing')) {
-    return 'The AI service refused the request because of quota or billing limits on this API key.'
-  }
-
-  return 'The AI request failed on the server. Check the AI service key and try again.'
-}
-
-// ─────────────────────────────────────────────────────────────
-// CONTEXT BUILDER (only used by the Project Co-Pilot)
-// ─────────────────────────────────────────────────────────────
+// ─── Memory context builder (Co-Pilot only) ───
 async function buildMemoryContext(userId: string, novelId?: string, novelContext?: unknown) {
   if (novelId) {
     const novel = await db.novel.findUnique({
@@ -173,9 +154,7 @@ Context ends.`
   return ''
 }
 
-// ─────────────────────────────────────────────────────────────
-// Multimodal message part types
-// ─────────────────────────────────────────────────────────────
+// ─── Multimodal message parts ───
 type MessagePart =
   | { text: string }
   | { inlineData: { data: string; mimeType: string } }
@@ -183,16 +162,13 @@ type MessagePart =
 type IncomingMessage = {
   role: string
   content: string
-  // Optional multimodal attachments — array of base64 strings or {data, mimeType}
   images?: Array<string | { data: string; mimeType: string }>
 }
 
-// Convert a base64 string or {data, mimeType} object to a Gemini inlineData part.
 function toInlinePart(img: string | { data: string; mimeType: string }): { inlineData: { data: string; mimeType: string } } | null {
   let data = ''
   let mimeType = 'image/jpeg'
   if (typeof img === 'string') {
-    // Allow data URLs ("data:image/png;base64,....") or raw base64
     const match = img.match(/^data:([^;]+);base64,(.+)$/)
     if (match) {
       mimeType = match[1]
@@ -218,21 +194,20 @@ function buildParts(message: IncomingMessage): MessagePart[] {
       if (part) parts.push(part)
     }
   }
-  // Gemini requires at least one part per message.
   if (parts.length === 0) parts.push({ text: '' })
   return parts
 }
 
-// ─────────────────────────────────────────────────────────────
-// POST handler
-// ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser(req)
-    if (!user) return streamError('Unauthorized', 401)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     if (!API_KEY) {
-      return streamError('Missing GOOGLE_API_KEY or GEMINI_API_KEY. Add one in Vercel project settings.', 500)
+      return NextResponse.json(
+        { error: 'Missing GOOGLE_API_KEY or GEMINI_API_KEY. Add one in Vercel project settings.' },
+        { status: 500 }
+      )
     }
 
     const body = await req.json().catch(() => ({}))
@@ -244,7 +219,7 @@ export async function POST(req: NextRequest) {
     const systemPrompt = resolveSystemPrompt(purpose)
 
     if (!Array.isArray(messages) || messages.length === 0) {
-      return streamError('No messages.', 400)
+      return NextResponse.json({ error: 'No messages.' }, { status: 400 })
     }
 
     // Build memory context ONLY for the Co-Pilot. Main chat has no novel context.
@@ -258,7 +233,6 @@ export async function POST(req: NextRequest) {
       systemInstruction: `${systemPrompt}${memoryContext}`,
     })
 
-    // Convert messages to Gemini format with multimodal parts.
     const history = messages.slice(0, -1).map((message) => ({
       role: geminiRole(message.role),
       parts: buildParts(message),
@@ -267,17 +241,13 @@ export async function POST(req: NextRequest) {
     const lastParts = buildParts(last)
     const isEmptyText = lastParts.length === 0 || (lastParts.length === 1 && 'text' in lastParts[0] && lastParts[0].text === '')
     if (isEmptyText) {
-      // Empty final message — but if it has images, that's OK.
       const hasImages = Array.isArray(last.images) && last.images.length > 0
       if (!hasImages) {
-        return streamError('The final message is empty.', 400)
+        return NextResponse.json({ error: 'The final message is empty.' }, { status: 400 })
       }
     }
 
-    // ─── Persist the user message to DB (if sessionId provided) ───
-    // We save the text content of the user's last message. Images are NOT
-    // persisted to keep DB rows small — the AI response is what matters
-    // for chat history recall.
+    // ─── Persist user message to DB (if sessionId provided) ───
     let savedUserMessageId: string | undefined
     if (sessionId) {
       try {
@@ -295,7 +265,6 @@ export async function POST(req: NextRequest) {
         }
       } catch (err) {
         console.error('[chat] user message persist error:', err)
-        // non-fatal — streaming continues
       }
     }
 
@@ -315,7 +284,7 @@ export async function POST(req: NextRequest) {
               controller.enqueue(encoder.encode(text))
             }
           }
-          // ─── Persist the assistant response to DB (if sessionId provided) ───
+          // ─── Persist assistant response to DB ───
           if (sessionId && savedUserMessageId && fullResponse.trim()) {
             try {
               await db.chatMessage.create({
@@ -328,12 +297,14 @@ export async function POST(req: NextRequest) {
               await db.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } })
             } catch (err) {
               console.error('[chat] assistant message persist error:', err)
-              // non-fatal
             }
           }
         } catch (err) {
-          console.error('chat stream error', err)
-          controller.enqueue(encoder.encode('\n\n[The model stream ended unexpectedly.]'))
+          // Surface the EXACT Google error into the stream so the frontend
+          // can display it — never replace with a generic message.
+          const msg = extractErrorMessage(err)
+          console.error('chat stream error:', msg)
+          controller.enqueue(encoder.encode(`\n\n[Error: ${msg}]`))
         } finally {
           controller.close()
         }
@@ -349,9 +320,11 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err) {
-    console.error('chat error', err)
+    // Surface the EXACT error message from Google — never a generic string
+    const msg = extractErrorMessage(err)
+    console.error('chat error:', msg)
     return NextResponse.json(
-      { error: getPublicErrorMessage(err) },
+      { error: msg },
       { status: 502 }
     )
   }

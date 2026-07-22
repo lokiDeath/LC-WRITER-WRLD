@@ -3,16 +3,11 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const user = await getCurrentUser(req)
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const { id } = await params
-    const session = await db.chatSession.findUnique({ where: { id } })
-    if (!session || session.userId !== user.id) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
-    const messages = await db.chatMessage.findMany({ where: { sessionId: id }, orderBy: { createdAt: 'asc' } })
-    return NextResponse.json({ messages })
-  } catch (err) {
-    console.error('[chat/sessions/[id]/messages GET] error:', err)
-    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
-  }
+  const user = await getCurrentUser(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { id } = await params
+  const session = await db.chatSession.findUnique({ where: { id } })
+  if (!session || session.userId !== user.id) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
+  const messages = await db.chatMessage.findMany({ where: { sessionId: id }, orderBy: { createdAt: 'asc' } })
+  return NextResponse.json({ messages })
 }

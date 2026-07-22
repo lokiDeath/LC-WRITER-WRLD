@@ -41,77 +41,72 @@ const TAB_LABELS: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
+  const user = await getCurrentUser(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json().catch(() => ({}))
+  const { projectId, activeTabKey, content, projectContext: inlineContext } = body as {
+    projectId: string
+    activeTabKey: string
+    content: string
+    projectContext?: string
+  }
+
+  if (!content) {
+    return NextResponse.json({ error: 'content required.' }, { status: 400 })
+  }
+
+  const activeTabLabel = TAB_LABELS[activeTabKey] || activeTabKey
+
+  // Build context — either from inline (dummy projects) or from DB
+  let projectContext = ''
+  if (inlineContext) {
+    projectContext = inlineContext
+  } else if (projectId) {
+    const project = await db.project.findUnique({
+      where: { id: projectId },
+      include: { tabs: true },
+    })
+    if (!project || project.ownerId !== user.id) {
+      return NextResponse.json({ error: 'Project not found.' }, { status: 404 })
+    }
+    const nonEmptyTabs = project.tabs.filter((t) => t.content && t.content.trim().length > 0)
+    const contextParts: string[] = []
+    for (const tab of nonEmptyTabs) {
+      const label = TAB_LABELS[tab.tabKey] || tab.tabKey
+      let tabContent = tab.content.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').trim()
+      if (tab.tabKey === 'full-writing' && tabContent.length > 20000) {
+        tabContent = tabContent.slice(0, 20000) + '\n[...master document truncated for context...]'
+      }
+      if (tabContent.length > 8000) {
+        tabContent = tabContent.slice(0, 8000) + '\n[...truncated...]'
+      }
+      contextParts.push(`=== ${label} ===\n${tabContent}`)
+    }
+    projectContext = contextParts.join('\n\n')
+  }
+
+  const systemPrompt =
+    STUDIO_COPILOT_SYSTEM +
+    `\n\nYou are currently assisting the author in the "${activeTabLabel}" tab. Tailor your response to that context.` +
+    (projectContext ? `\n\n--- PROJECT MEMORY ---\n${projectContext}\n--- END MEMORY ---\n` : '')
+
   try {
-    const user = await getCurrentUser(req)
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const body = await req.json().catch(() => ({}))
-    const { projectId, activeTabKey, content, projectContext: inlineContext } = body as {
-      projectId: string
-      activeTabKey: string
-      content: string
-      projectContext?: string
-    }
-
-    if (!content) {
-      return NextResponse.json({ error: 'content required.' }, { status: 400 })
-    }
-
-    const activeTabLabel = TAB_LABELS[activeTabKey] || activeTabKey
-
-    // Build context — either from inline (dummy projects) or from DB
-    let projectContext = ''
-    if (inlineContext) {
-      projectContext = inlineContext
-    } else if (projectId) {
-      const project = await db.project.findUnique({
-        where: { id: projectId },
-        include: { tabs: true },
-      })
-      if (!project || project.ownerId !== user.id) {
-        return NextResponse.json({ error: 'Project not found.' }, { status: 404 })
-      }
-      const nonEmptyTabs = project.tabs.filter((t) => t.content && t.content.trim().length > 0)
-      const contextParts: string[] = []
-      for (const tab of nonEmptyTabs) {
-        const label = TAB_LABELS[tab.tabKey] || tab.tabKey
-        let tabContent = tab.content.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').trim()
-        if (tab.tabKey === 'full-writing' && tabContent.length > 20000) {
-          tabContent = tabContent.slice(0, 20000) + '\n[...master document truncated for context...]'
-        }
-        if (tabContent.length > 8000) {
-          tabContent = tabContent.slice(0, 8000) + '\n[...truncated...]'
-        }
-        contextParts.push(`=== ${label} ===\n${tabContent}`)
-      }
-      projectContext = contextParts.join('\n\n')
-    }
-
-    const systemPrompt =
-      STUDIO_COPILOT_SYSTEM +
-      `\n\nYou are currently assisting the author in the "${activeTabLabel}" tab. Tailor your response to that context.` +
-      (projectContext ? `\n\n--- PROJECT MEMORY ---\n${projectContext}\n--- END MEMORY ---\n` : '')
-
-    try {
-      const zai = await ZAI.create()
-      const completion = await zai.chat.completions.create({
-        messages: [
-          { role: 'assistant', content: systemPrompt },
-          { role: 'user', content },
-        ],
-        thinking: { type: 'disabled' },
-      })
-      const reply = completion.choices[0]?.message?.content || ''
-      return NextResponse.json({ reply })
-    } catch (err: any) {
-      console.error('studio chat error', err)
-      return NextResponse.json(
-        { error: 'The model failed to respond. Try again.' },
-        { status: 502 }
-      )
-    }
-  } catch (err) {
-    console.error('[studio/chat POST] error:', err)
-    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+    const zai = await ZAI.create()
+    const completion = await zai.chat.completions.create({
+      messages: [
+        { role: 'assistant', content: systemPrompt },
+        { role: 'user', content },
+      ],
+      thinking: { type: 'disabled' },
+    })
+    const reply = completion.choices[0]?.message?.content || ''
+    return NextResponse.json({ reply })
+  } catch (err: any) {
+    console.error('studio chat error', err)
+    return NextResponse.json(
+      { error: 'The model failed to respond. Try again.' },
+      { status: 502 }
+    )
   }
 }

@@ -2,48 +2,31 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Loader2, Sparkles } from 'lucide-react'
+import { Loader2, Sparkles, Maximize2, Minimize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/lib/store'
-import { ChatInput, type AIModel, type UploadedImage } from './chat-input'
-
-// Default model object kept for backwards compatibility with ChatInput's
-// optional selectedModel prop. The backend is hardcoded to gemini-1.5-flash
-// for the Main Chat — this object is NOT used to select a model anymore.
-const DEFAULT_MODEL: AIModel = {
-  id: 'main',
-  name: 'Lucian Assistant',
-  icon: Sparkles,
-  desc: 'Helpful AI assistant',
-  color: 'text-purple-400',
-}
+import { ChatInput, type UploadedImage } from './chat-input'
 
 type Message = {
   id: string
   role: 'user' | 'assistant'
   content: string
-  // For user messages with images, we keep the data URLs for preview.
   imageUrls?: string[]
 }
 
 type ChatLayoutProps = {
   isFullscreen: boolean
   onToggleFullscreen: () => void
-  // NEW: optional sessionId from the parent (Dashboard) so a clicked
-  // recent chat is loaded into the chat view.
   sessionId?: string | null
-  // NEW: when the parent creates a new chat, it bumps this counter to
-  // force the chat view to reset.
   resetSignal?: number
 }
 
-export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onToggleFullscreen, sessionId: externalSessionId, resetSignal }: ChatLayoutProps) {
+export function ChatPage({ isFullscreen, onToggleFullscreen, sessionId: externalSessionId, resetSignal }: ChatLayoutProps) {
   const user = useApp((s) => s.user)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isListening, setIsListening] = useState(false)
   const [welcomeText, setWelcomeText] = useState('')
-  const [ghostText, setGhostText] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const [lineCount, setLineCount] = useState(1)
   const [sending, setSending] = useState(false)
@@ -53,7 +36,7 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
   const [clearImagesSignal, setClearImagesSignal] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // ─── Reset state when resetSignal bumps (parent clicked "New Chat") ───
+  // Reset when resetSignal bumps (parent clicked "New Chat")
   useEffect(() => {
     if (resetSignal && resetSignal > 0) {
       setMessages([])
@@ -65,14 +48,14 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
     }
   }, [resetSignal])
 
-  // ─── If parent passes a new externalSessionId, switch to it ───
+  // If parent passes a new externalSessionId, switch to it
   useEffect(() => {
     if (externalSessionId && externalSessionId !== currentSessionId) {
       setCurrentSessionId(externalSessionId)
     }
   }, [externalSessionId, currentSessionId])
 
-  // ─── Load messages when sessionId changes ───
+  // Load messages when sessionId changes
   useEffect(() => {
     if (!currentSessionId || currentSessionId === loadedSessionId) return
     let cancelled = false
@@ -97,12 +80,10 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
       }
     }
     loadMessages()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [currentSessionId, loadedSessionId])
 
-  // Set welcome text ONCE on mount. Use real user name if available.
+  // Set welcome text
   useEffect(() => {
     const name = user?.displayName
     const base = name ? `Let's jump in, ${name}` : "Let's jump in"
@@ -124,7 +105,6 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
     setInput(val)
     const lines = val.split('\n').length
     setLineCount(lines)
-    setGhostText('')
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -134,11 +114,10 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
     }
   }
 
-  // ─── Ensure a chat session exists before sending ───
+  // Ensure a chat session exists before sending
   async function ensureSession(firstMessageText: string): Promise<string | null> {
     if (currentSessionId) return currentSessionId
     try {
-      // Derive a short title from the first message
       const title = firstMessageText.slice(0, 40).trim() || 'New Chat'
       const res = await fetch('/api/chat/sessions', {
         method: 'POST',
@@ -150,18 +129,12 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
       const sid = data?.session?.id
       if (sid) {
         setCurrentSessionId(sid)
-        // Notify the parent Dashboard so the sidebar list refreshes.
-        // We use a custom event so the parent can react without tight coupling.
         try {
           window.dispatchEvent(new CustomEvent('lc-chat-created', { detail: { sessionId: sid, title } }))
-        } catch {
-          // ignore
-        }
+        } catch { /* ignore */ }
         return sid
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
     return null
   }
 
@@ -170,7 +143,6 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
     const hasImages = attachedImages.length > 0
     if ((!text && !hasImages) || sending) return
 
-    // Build user message with image previews (data URLs)
     const imageUrls = attachedImages.map((img) => img.url)
     const userMsg: Message = {
       id: `u_${Date.now()}`,
@@ -181,25 +153,18 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
     const history = [...messages, userMsg]
     setMessages(history)
     setInput('')
-    setGhostText('')
     setLineCount(1)
     setIsExpanded(false)
-    // Clear the image carousel in the child ChatInput
     setAttachedImages([])
     setClearImagesSignal((s) => s + 1)
     setSending(true)
 
     const assistantId = `a_${Date.now()}`
-    // Optimistically add an empty assistant message that we'll stream into.
     setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '' }])
 
     try {
-      // Ensure a chat session exists (creates one on first send)
       const sid = await ensureSession(text || 'Image chat')
 
-      // Build the payload for /api/chat. The Main Chat sends purpose: 'main'
-      // which the backend uses to select gemini-1.5-flash + the generic
-      // assistant system prompt.
       const payload: {
         purpose: 'main'
         sessionId?: string
@@ -213,7 +178,7 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
       }
       if (sid) payload.sessionId = sid
 
-      // Attach images to the LAST (user) message in the payload
+      // Attach images to the LAST (user) message
       if (hasImages) {
         const lastIdx = payload.messages.length - 1
         payload.messages[lastIdx].images = attachedImages.map((img) => ({
@@ -227,9 +192,12 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+
       if (!res.ok) {
+        // Surface the EXACT error from the backend — never a generic string
         const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || `AI request failed with ${res.status}`)
+        const errMsg = data?.error || `Request failed with status ${res.status}`
+        throw new Error(errMsg)
       }
 
       const reader = res.body?.getReader()
@@ -248,11 +216,12 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
         )
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Network error reaching the AI service.'
+      // Display the EXACT error message from the backend
+      const errMsg = err instanceof Error ? err.message : 'Request failed.'
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantId
-            ? { ...msg, content: `${message} Please check your API key and try again.` }
+            ? { ...msg, content: `${errMsg}` }
             : msg
         )
       )
@@ -266,17 +235,26 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
       try {
         await navigator.mediaDevices.getUserMedia({ audio: true })
         setIsListening(true)
-      } catch {
-        // blocked
-      }
+      } catch { /* blocked */ }
     } else {
       setIsListening(false)
     }
   }
 
   return (
-    <div className="h-full flex flex-col bg-zinc-950 relative">
-      {/* Chat messages area — extra top padding on mobile so it clears the hamburger button */}
+    <div className="h-full flex flex-col bg-[var(--bg-canvas)] relative">
+      {/* Fullscreen toggle */}
+      <div className="absolute top-3 right-4 z-50">
+        <button
+          onClick={onToggleFullscreen}
+          className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-lg transition-all duration-150 ease-out"
+          title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        >
+          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {/* Chat messages area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto lc-scroll px-4 md:px-8 pt-12 md:py-6">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center">
@@ -284,7 +262,7 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
-              className="text-3xl font-serif text-zinc-300"
+              className="text-3xl font-serif text-[var(--text-secondary)]"
             >
               {welcomeText}
             </motion.div>
@@ -294,19 +272,18 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
             {messages.map((msg) => (
               <div key={msg.id} className={cn('flex gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
                 {msg.role === 'assistant' && (
-                  <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 mt-1">
-                    <DEFAULT_MODEL.icon className={cn('w-4 h-4', DEFAULT_MODEL.color)} />
+                  <div className="w-8 h-8 rounded-full bg-[var(--surface-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0 mt-1">
+                    <Sparkles className="w-4 h-4 text-[var(--accent)]" />
                   </div>
                 )}
                 <div
                   className={cn(
-                    'max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed',
+                    'max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed transition-all duration-150 ease-out',
                     msg.role === 'user'
-                      ? 'bg-zinc-800 text-zinc-100 rounded-br-sm'
-                      : 'bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-bl-sm'
+                      ? 'bg-[var(--surface-elevated)] text-[var(--text-primary)] rounded-br-sm'
+                      : 'bg-[var(--surface-card)] border border-[var(--border-subtle)] text-[var(--text-secondary)] rounded-bl-sm'
                   )}
                 >
-                  {/* Render attached image thumbnails for user messages */}
                   {msg.imageUrls && msg.imageUrls.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2">
                       {msg.imageUrls.map((url, i) => (
@@ -315,7 +292,7 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
                           key={i}
                           src={url}
                           alt={`Attachment ${i + 1}`}
-                          className="w-32 h-32 object-cover rounded-lg border border-zinc-700"
+                          className="w-32 h-32 object-cover rounded-lg border border-[var(--border-default)]"
                         />
                       ))}
                     </div>
@@ -323,8 +300,8 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
                   <p className="whitespace-pre-wrap">{msg.content}</p>
                 </div>
                 {msg.role === 'user' && (
-                  <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center shrink-0 mt-1">
-                    <span className="text-[10px] text-zinc-400 font-serif">
+                  <div className="w-8 h-8 rounded-full bg-[var(--surface-elevated)] flex items-center justify-center shrink-0 mt-1">
+                    <span className="text-[10px] text-[var(--text-muted)] font-serif">
                       {user?.displayName?.charAt(0).toUpperCase() || 'U'}
                     </span>
                   </div>
@@ -332,7 +309,7 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
               </div>
             ))}
             {sending && (
-              <div className="flex items-center gap-2 text-xs text-zinc-500 pl-12">
+              <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] pl-12">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 <span>Generating response…</span>
               </div>
@@ -350,7 +327,7 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
         isListening={isListening}
         onToggleVoice={toggleVoice}
         isNewChat={messages.length === 0}
-        ghostText={ghostText}
+        ghostText=""
         lineCount={lineCount}
         isExpanded={isExpanded}
         onToggleExpand={() => setIsExpanded(!isExpanded)}

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import ZAI from 'z-ai-web-dev-sdk'
+import fs from 'fs'
+import path from 'path'
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser(req)
@@ -13,8 +15,11 @@ export async function POST(req: NextRequest) {
     const response = await zai.images.generations.create({ prompt, size: '768x1344' })
     const b64 = response.data[0]?.base64
     if (!b64) throw new Error('no image returned')
-    // Return a base64 data URL directly — no disk write (public/ is read-only on Vercel)
-    return NextResponse.json({ url: `data:image/png;base64,${b64}` })
+    const dir = path.join(process.cwd(), 'public', 'portraits')
+    fs.mkdirSync(dir, { recursive: true })
+    const filename = `portrait_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.png`
+    fs.writeFileSync(path.join(dir, filename), Buffer.from(b64, 'base64'))
+    return NextResponse.json({ url: `/portraits/${filename}` })
   } catch (err: any) {
     console.error('image-gen error', err)
     return NextResponse.json({ error: 'Image generation failed.' }, { status: 502 })

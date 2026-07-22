@@ -39,72 +39,33 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File | null
-    const url = (formData.get('url') as string) || ''
-    let hostname = 'Imported Project'
-    try { if (url) hostname = new URL(url).hostname } catch {}
-    const projectName =
-      (formData.get('projectName') as string) ||
-      file?.name ||
-      hostname
+    const projectName = (formData.get('projectName') as string) || file?.name || 'Imported Project'
 
+    if (!file) {
+      return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 })
+    }
+
+    // Read file content based on type
     let rawText = ''
-    let sourceLabel = ''
-
-    if (url) {
-      // Fetch remote text
-      sourceLabel = url
-      try {
-        const r = await fetch(url, { redirect: 'follow' })
-        if (!r.ok) {
-          return NextResponse.json({ error: `URL fetch failed: ${r.status}` }, { status: 400 })
-        }
-        const contentType = r.headers.get('content-type') || ''
-        if (contentType.includes('text/html')) {
-          // Strip HTML tags
-          const html = await r.text()
-          rawText = html
-            .replace(/<script[\s\S]*?<\/script>/gi, '')
-            .replace(/<style[\s\S]*?<\/style>/gi, '')
-            .replace(/<[^>]+>/g, '\n')
-            .replace(/&nbsp;/g, ' ')
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/\n{3,}/g, '\n\n')
-            .trim()
-        } else {
-          rawText = await r.text()
-        }
-      } catch (err) {
-        return NextResponse.json(
-          { error: `Failed to fetch URL: ${err instanceof Error ? err.message : 'unknown'}` },
-          { status: 400 }
-        )
-      }
-    } else if (file) {
-      sourceLabel = file.name
-      const fname = file.name.toLowerCase()
-      if (fname.endsWith('.txt') || fname.endsWith('.md')) {
-        rawText = await file.text()
-      } else if (fname.endsWith('.docx')) {
-        // Lightweight .docx text extraction — read the document.xml from the zip
-        // Without a docx-parsing library, we extract raw text heuristically
-        const buf = Buffer.from(await file.arrayBuffer())
-        // Strip non-text bytes crudely — this won't be perfect but gets most prose
-        const text = buf.toString('utf-8').replace(/[^\x20-\x7E\n\r]+/g, ' ')
-        // Pull sequences of readable text
-        const matches = text.match(/[A-Za-z][A-Za-z0-9 ,.;:!?"'()-]{15,}/g)
-        rawText = matches ? matches.join(' ') : ''
-      } else {
-        // Try as text
-        rawText = await file.text()
-      }
+    const fname = file.name.toLowerCase()
+    if (fname.endsWith('.txt') || fname.endsWith('.md')) {
+      rawText = await file.text()
+    } else if (fname.endsWith('.docx')) {
+      // Lightweight .docx text extraction — read the document.xml from the zip
+      // Without a docx-parsing library, we extract raw text heuristically
+      const buf = Buffer.from(await file.arrayBuffer())
+      // Strip non-text bytes crudely — this won't be perfect but gets most prose
+      const text = buf.toString('utf-8').replace(/[^\x20-\x7E\n\r]+/g, ' ')
+      // Pull sequences of readable text
+      const matches = text.match(/[A-Za-z][A-Za-z0-9 ,.;:!?"'()-]{15,}/g)
+      rawText = matches ? matches.join(' ') : ''
     } else {
-      return NextResponse.json({ error: 'No file or URL provided.' }, { status: 400 })
+      // Try as text
+      rawText = await file.text()
     }
 
     if (!rawText.trim()) {
-      return NextResponse.json({ error: 'Could not extract text from source.' }, { status: 400 })
+      return NextResponse.json({ error: 'Could not extract text from file.' }, { status: 400 })
     }
 
     // Truncate to ~80k chars to stay within context limits
@@ -115,7 +76,7 @@ export async function POST(req: NextRequest) {
       data: {
         ownerId: user.id,
         name: projectName,
-        description: `Imported from ${sourceLabel}`,
+        description: `Imported from ${file.name}`,
       },
     })
 
@@ -144,7 +105,7 @@ export async function POST(req: NextRequest) {
       data: { content: paragraphs },
     })
 
-    // Run AI auto-sort to extract Characters / Lore / Locations / etc.
+    // Run AI auto-sort
     let tabsExtracted = 1 // full-writing always
     try {
       const zai = await ZAI.create()
@@ -176,12 +137,10 @@ export async function POST(req: NextRequest) {
           .filter(Boolean)
           .map((line) => `<p>${line}</p>`)
           .join('\n')
-        await db.projectTab
-          .update({
-            where: { projectId_tabKey: { projectId: project.id, tabKey: key } },
-            data: { content: html },
-          })
-          .catch(() => {}) // ignore if the tab key isn't in our schema
+        await db.projectTab.update({
+          where: { projectId_tabKey: { projectId: project.id, tabKey: key } },
+          data: { content: html },
+        }).catch(() => {}) // ignore if the tab key isn't in our schema
         tabsExtracted++
       }
     } catch (err) {
@@ -193,7 +152,7 @@ export async function POST(req: NextRequest) {
       where: { id: project.id },
       include: { tabs: true },
     })
-    return NextResponse.json({ project: full, tabsExtracted, source: sourceLabel })
+    return NextResponse.json({ project: full, tabsExtracted })
   } catch (err: any) {
     console.error('import error', err)
     return NextResponse.json({ error: 'Import failed.' }, { status: 500 })

@@ -22,39 +22,34 @@ OPERATING RULES:
 TONE: Witty, literary, direct. A senior editor who has read everything.`
 
 export async function POST(req: NextRequest) {
+  const user = await getCurrentUser(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user.hiddenModeUnlocked) return NextResponse.json({ error: 'Hidden Mode not unlocked.' }, { status: 403 })
+  const body = await req.json().catch(() => ({}))
+  const { sessionId, content } = body as { sessionId: string; content: string }
+  if (!sessionId || !content) return NextResponse.json({ error: 'sessionId and content required.' }, { status: 400 })
+  const session = await db.chatSession.findUnique({ where: { id: sessionId } })
+  if (!session || session.userId !== user.id) return NextResponse.json({ error: 'Session not found.' }, { status: 404 })
+  if (session.mode !== 'hidden') return NextResponse.json({ error: 'Use /api/chat/send for novel-partner sessions.' }, { status: 400 })
+
+  const userMessage = await db.chatMessage.create({ data: { sessionId, role: 'user', content } })
+  const pastMessages = await db.chatMessage.findMany({ where: { sessionId }, orderBy: { createdAt: 'asc' }, take: 20 })
+
   try {
-    const user = await getCurrentUser(req)
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    if (!user.hiddenModeUnlocked) return NextResponse.json({ error: 'Hidden Mode not unlocked.' }, { status: 403 })
-    const body = await req.json().catch(() => ({}))
-    const { sessionId, content } = body as { sessionId: string; content: string }
-    if (!sessionId || !content) return NextResponse.json({ error: 'sessionId and content required.' }, { status: 400 })
-    const session = await db.chatSession.findUnique({ where: { id: sessionId } })
-    if (!session || session.userId !== user.id) return NextResponse.json({ error: 'Session not found.' }, { status: 404 })
-    if (session.mode !== 'hidden') return NextResponse.json({ error: 'Use /api/chat/send for novel-partner sessions.' }, { status: 400 })
-
-    const userMessage = await db.chatMessage.create({ data: { sessionId, role: 'user', content } })
-    const pastMessages = await db.chatMessage.findMany({ where: { sessionId }, orderBy: { createdAt: 'asc' }, take: 20 })
-
-    try {
-      const zai = await ZAI.create()
-      const completion = await zai.chat.completions.create({
-        messages: [
-          { role: 'assistant', content: PRIVATE_CRAFT_SYSTEM },
-          ...pastMessages.map((m) => ({ role: (m.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user', content: m.content })),
-        ],
-        thinking: { type: 'disabled' },
-      })
-      const reply = completion.choices[0]?.message?.content || ''
-      const assistantMessage = await db.chatMessage.create({ data: { sessionId, role: 'assistant', content: reply } })
-      await db.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } })
-      return NextResponse.json({ userMessage, assistantMessage })
-    } catch (err: any) {
-      console.error('hidden chat error', err)
-      return NextResponse.json({ error: 'The model failed to respond. Try again.' }, { status: 502 })
-    }
-  } catch (err) {
-    console.error('[hidden/chat POST] error:', err)
-    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+    const zai = await ZAI.create()
+    const completion = await zai.chat.completions.create({
+      messages: [
+        { role: 'assistant', content: PRIVATE_CRAFT_SYSTEM },
+        ...pastMessages.map((m) => ({ role: (m.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user', content: m.content })),
+      ],
+      thinking: { type: 'disabled' },
+    })
+    const reply = completion.choices[0]?.message?.content || ''
+    const assistantMessage = await db.chatMessage.create({ data: { sessionId, role: 'assistant', content: reply } })
+    await db.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } })
+    return NextResponse.json({ userMessage, assistantMessage })
+  } catch (err: any) {
+    console.error('hidden chat error', err)
+    return NextResponse.json({ error: 'The model failed to respond. Try again.' }, { status: 502 })
   }
 }
