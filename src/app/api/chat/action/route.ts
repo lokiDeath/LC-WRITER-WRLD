@@ -13,35 +13,40 @@ const ACTION_PROMPTS: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser(req)
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const body = await req.json().catch(() => ({}))
-  const { action, text, novelId, chapterTitle } = body as { action: string; text: string; novelId?: string; chapterTitle?: string }
-  if (!action || !text) return NextResponse.json({ error: 'action and text required.' }, { status: 400 })
-  const prompt = ACTION_PROMPTS[action]
-  if (!prompt) return NextResponse.json({ error: 'Unknown action.' }, { status: 400 })
-
-  let contextNote = ''
-  if (novelId) {
-    const novel = await db.novel.findUnique({ where: { id: novelId } })
-    if (novel && novel.authorId === user.id) {
-      contextNote = `\n\nContext: This is from the novel "${novel.title}" (${novel.genre || 'unspecified genre'}). Chapter: ${chapterTitle || 'untitled'}.`
-    }
-  }
-
   try {
-    const zai = await ZAI.create()
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: 'assistant', content: 'You are L-C, an elite fiction editor. ' + prompt + contextNote + '\n\nMaintain the author\'s voice. Do not add disclaimers. Do not explain your changes. Just return the revised text.' },
-        { role: 'user', content: text },
-      ],
-      thinking: { type: 'disabled' },
-    })
-    const result = completion.choices[0]?.message?.content || ''
-    return NextResponse.json({ result })
-  } catch (err: any) {
-    console.error('chat action error', err)
-    return NextResponse.json({ error: 'The model failed to respond. Try again.' }, { status: 502 })
+    const user = await getCurrentUser(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const body = await req.json().catch(() => ({}))
+    const { action, text, novelId, chapterTitle } = body as { action: string; text: string; novelId?: string; chapterTitle?: string }
+    if (!action || !text) return NextResponse.json({ error: 'action and text required.' }, { status: 400 })
+    const prompt = ACTION_PROMPTS[action]
+    if (!prompt) return NextResponse.json({ error: 'Unknown action.' }, { status: 400 })
+
+    let contextNote = ''
+    if (novelId) {
+      const novel = await db.novel.findUnique({ where: { id: novelId } })
+      if (novel && novel.authorId === user.id) {
+        contextNote = `\n\nContext: This is from the novel "${novel.title}" (${novel.genre || 'unspecified genre'}). Chapter: ${chapterTitle || 'untitled'}.`
+      }
+    }
+
+    try {
+      const zai = await ZAI.create()
+      const completion = await zai.chat.completions.create({
+        messages: [
+          { role: 'assistant', content: 'You are L-C, an elite fiction editor. ' + prompt + contextNote + '\n\nMaintain the author\'s voice. Do not add disclaimers. Do not explain your changes. Just return the revised text.' },
+          { role: 'user', content: text },
+        ],
+        thinking: { type: 'disabled' },
+      })
+      const result = completion.choices[0]?.message?.content || ''
+      return NextResponse.json({ result })
+    } catch (err) {
+      console.error('chat action error', err)
+      return NextResponse.json({ error: 'The model failed to respond. Try again.' }, { status: 502 })
+    }
+  } catch (err) {
+    console.error('[chat/action] error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
   }
 }

@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, ChevronRight, ChevronLeft, Sparkles,
-  Settings, BookOpen, Users, Bell,
-  Bot, Check, FolderOpen, Feather,
+  Settings, BookOpen,
+  Bell, Bot, Check, FolderOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -28,20 +28,8 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'sidebar',
     title: 'The Sidebar',
-    description: 'This is your home base. New Chat starts a fresh AI conversation. Search Chat finds past discussions. Library holds your manuscripts. Projects holds your novels. Recent Chats shows your latest conversations.',
+    description: 'This is your home base. New Chat starts a fresh AI conversation. Library holds your manuscripts. Projects holds your novels. Recent Chats shows your latest conversations.',
     icon: BookOpen,
-  },
-  {
-    id: 'guild',
-    title: 'The Guild',
-    description: 'A community space where writers gather. Join Hubs (group chat rooms), share excerpts, ask for feedback, and connect with other authors. The Hub is the permanent VIP showroom — start there.',
-    icon: Users,
-  },
-  {
-    id: 'circle',
-    title: 'The Circle',
-    description: 'Private 1-on-1 direct messages with other writers. Click any avatar in The Guild and select "Message" to start a private conversation. Archive, pin, or mute chats from the row menu.',
-    icon: Feather,
   },
   {
     id: 'projects',
@@ -58,7 +46,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'canvas',
     title: 'The Writing Canvas',
-    description: 'A Google-Docs-style editor with a full formatting toolbar at the top — bold, italic, headings, alignment, lists, and more. Your work auto-saves. Use the Chapter Slicer to break long manuscripts into chapters without touching the original.',
+    description: 'A Google-Docs-style editor with a full formatting toolbar on the left side — bold, italic, headings, alignment, lists, and more. Your work auto-saves. Use the Chapter Slicer to break long manuscripts into chapters without touching the original.',
     icon: BookOpen,
   },
   {
@@ -70,14 +58,8 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'settings',
     title: 'Settings & Ascension',
-    description: 'Click your profile pill (bottom-left) to open Settings. Personalize the theme, configure AI behavior, link external accounts (Google, GitHub, Discord). Track your Ascension Status — a silent cultivation system that ranks you from Apprentice to Author Progenitor.',
+    description: 'Click your profile pill (bottom-left) to open Settings. Personalize the theme, configure AI behavior, link external accounts (Google, GitHub, Discord). Track your Ascension Status — a silent cultivation system that ranks you from Apprentice to Author Progenitor. That is the tour — welcome to the Grand Archive.',
     icon: Settings,
-  },
-  {
-    id: 'ready',
-    title: 'You are ready',
-    description: 'That is the tour. Create your first project, open it, and start writing. The AI Co-Pilot will greet you with quick-action buttons. Welcome to the Grand Archive.',
-    icon: Check,
   },
 ]
 
@@ -97,7 +79,7 @@ export function OnboardingTour({ onComplete }: OnboardingTourProps) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   function handleDismiss() {

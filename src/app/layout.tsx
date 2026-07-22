@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { LanguageProvider } from "@/lib/LanguageContext";
 
 const inter = Inter({
   variable: "--font-geist-sans",
@@ -29,7 +30,7 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "L." }],
   icons: {
-    icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2316130f'/%3E%3Ctext x='16' y='22' font-family='Georgia,serif' font-size='18' fill='%23c9a96e' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E",
+    icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230d0a07'/%3E%3Ctext x='16' y='22' font-family='Georgia,serif' font-size='18' fill='%23c8893f' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E",
   },
 };
 
@@ -38,13 +39,17 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Theme bootstrap — runs before paint to prevent FOUC.
-  // Reads saved theme from localStorage and applies the .dark/.light class.
+  // ─── Theme + Accent bootstrap (runs before paint to avoid FOUC) ───
+  // The html element defaults to "dark"; this script may swap it to "light"
+  // based on the saved `lc_theme` localStorage value. It also restores the
+  // saved accent color via setProperty('--accent-color', hex).
   const themeBootstrap = `(function(){try{
     var t=localStorage.getItem('lc_theme');
     var root=document.documentElement;
     if(t==='light'){root.classList.remove('dark');root.classList.add('light');}
     else{root.classList.remove('light');root.classList.add('dark');}
+    var a=localStorage.getItem('lc_accent_color_hex');
+    if(a){root.style.setProperty('--accent-color',a);}
   }catch(e){}})();`
 
   return (
@@ -55,8 +60,10 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${playfair.variable} antialiased bg-background text-foreground`}
       >
-        {children}
-        <Toaster />
+        <LanguageProvider>
+          {children}
+          <Toaster />
+        </LanguageProvider>
       </body>
     </html>
   );

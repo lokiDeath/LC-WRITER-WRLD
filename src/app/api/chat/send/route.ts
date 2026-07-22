@@ -38,49 +38,56 @@ const SPECIALIST_PROMPTS: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser(req)
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const body = await req.json().catch(() => ({}))
-  const { sessionId, content, novelId } = body as { sessionId: string; content: string; novelId?: string }
-  if (!sessionId || !content) return NextResponse.json({ error: 'sessionId and content required.' }, { status: 400 })
-
-  const session = await db.chatSession.findUnique({ where: { id: sessionId } })
-  if (!session || session.userId !== user.id) return NextResponse.json({ error: 'Session not found.' }, { status: 404 })
-  if (session.mode !== 'novel_partner') return NextResponse.json({ error: 'Use /api/hidden/chat for hidden-mode sessions.' }, { status: 400 })
-
-  const userMessage = await db.chatMessage.create({ data: { sessionId, role: 'user', content } })
-
-  let memoryContext = ''
-  const effectiveNovelId = novelId || session.novelId
-  if (effectiveNovelId) {
-    const novel = await db.novel.findUnique({
-      where: { id: effectiveNovelId },
-      include: { chapters: { orderBy: { orderIndex: 'asc' } }, characters: true },
-    })
-    if (novel && novel.authorId === user.id) {
-      const chapterDump = novel.chapters.map((c) => `### ${c.title}\n\n${c.content}`).join('\n\n---\n\n')
-      const charDump = novel.characters.map((c) => `**${c.name}** (${c.role}) — ${c.personality}\nBackground: ${c.background}\nArc: ${c.arc}`).join('\n\n')
-      memoryContext = `\n\n--- ACTIVE NOVEL CONTEXT ---\nTitle: ${novel.title}\nGenre: ${novel.genre || 'unspecified'}\nDescription: ${novel.description}\n\nCharacters:\n${charDump}\n\nChapters:\n${chapterDump}\n--- END CONTEXT ---\n`
-    }
-  }
-
-  const pastMessages = await db.chatMessage.findMany({ where: { sessionId }, orderBy: { createdAt: 'asc' }, take: 20 })
-
   try {
-    const zai = await ZAI.create()
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: 'assistant', content: NOVEL_PARTNER_SYSTEM + (SPECIALIST_PROMPTS[session.aiMode] || '') + memoryContext },
-        ...pastMessages.map((m) => ({ role: (m.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user', content: m.content })),
-      ],
-      thinking: { type: 'disabled' },
-    })
-    const reply = completion.choices[0]?.message?.content || ''
-    const assistantMessage = await db.chatMessage.create({ data: { sessionId, role: 'assistant', content: reply } })
-    await db.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } })
-    return NextResponse.json({ userMessage, assistantMessage })
-  } catch (err: any) {
-    console.error('chat send error', err)
-    return NextResponse.json({ error: 'The model failed to respond. Try again.' }, { status: 502 })
+    const user = await getCurrentUser(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const body = await req.json().catch(() => ({}))
+    const { sessionId, content, novelId } = body as { sessionId: string; content: string; novelId?: string }
+    if (!sessionId || !content) return NextResponse.json({ error: 'sessionId and content required.' }, { status: 400 })
+
+    const session = await db.chatSession.findUnique({ where: { id: sessionId } })
+    if (!session || session.userId !== user.id) return NextResponse.json({ error: 'Session not found.' }, { status: 404 })
+    if (session.mode !== 'novel_partner') return NextResponse.json({ error: 'Use /api/hidden/chat for hidden-mode sessions.' }, { status: 400 })
+
+    const userMessage = await db.chatMessage.create({ data: { sessionId, role: 'user', content } })
+
+    let memoryContext = ''
+    const effectiveNovelId = novelId || session.novelId
+    if (effectiveNovelId) {
+      const novel = await db.novel.findUnique({
+        where: { id: effectiveNovelId },
+        include: { chapters: { orderBy: { orderIndex: 'asc' } }, characters: true },
+      })
+      if (novel && novel.authorId === user.id) {
+        const chapterDump = novel.chapters.map((c) => `### ${c.title}\n\n${c.content}`).join('\n\n---\n\n')
+        const charDump = novel.characters.map((c) => `**${c.name}** (${c.role}) — ${c.personality}\nBackground: ${c.background}\nArc: ${c.arc}`).join('\n\n')
+        memoryContext = `\n\n--- ACTIVE NOVEL CONTEXT ---\nTitle: ${novel.title}\nGenre: ${novel.genre || 'unspecified'}\nDescription: ${novel.description}\n\nCharacters:\n${charDump}\n\nChapters:\n${chapterDump}\n--- END CONTEXT ---\n`
+      }
+    }
+
+    const pastMessages = await db.chatMessage.findMany({ where: { sessionId }, orderBy: { createdAt: 'asc' }, take: 20 })
+
+    try {
+      const zai = await ZAI.create()
+      const completion = await zai.chat.completions.create({
+        messages: [
+          { role: 'assistant', content: NOVEL_PARTNER_SYSTEM + (SPECIALIST_PROMPTS[session.aiMode] || '') + memoryContext },
+          ...pastMessages.map((m) => ({ role: (m.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user', content: m.content })),
+        ],
+        thinking: { type: 'disabled' },
+      })
+      const reply = completion.choices[0]?.message?.content || ''
+      const assistantMessage = await db.chatMessage.create({ data: { sessionId, role: 'assistant', content: reply } })
+      await db.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } })
+      return NextResponse.json({ userMessage, assistantMessage })
+    } catch (err) {
+      console.error('chat send error', err)
+      // Best-effort: remove the orphan user message so the client doesn't show a half-exchange.
+      await db.chatMessage.delete({ where: { id: userMessage.id } }).catch(() => {})
+      return NextResponse.json({ error: 'The model failed to respond. Try again.' }, { status: 502 })
+    }
+  } catch (err) {
+    console.error('[chat/send] error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
   }
 }

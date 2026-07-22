@@ -1,17 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Search, Plus, FolderOpen, MoreVertical, Pencil, Trash2,
   ExternalLink, Share2, LayoutGrid, List as ListIcon, ChevronDown,
   Folder, ArrowDownAZ, X, CloudUpload, Star, Monitor, Clock,
-  FileText, ImageIcon,
+  FileText, ImageIcon, Upload, Loader2,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { SmartImportModal } from './smart-import-modal'
 
 type Project = {
   id: string
@@ -23,22 +24,54 @@ type Project = {
   starred: boolean
 }
 
-const INITIAL_PROJECTS: Project[] = [] // No mock projects — new users see an empty state
-
 type FilterOption = 'anyone' | 'me' | 'notme'
 type ModalTab = 'recent' | 'mydrive' | 'shared' | 'starred' | 'computers' | 'upload'
 
 export function ProjectsDashboard() {
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
   const [selectedProject, setSelectedProject] = useState<string | null>(null)
   const [filter, setFilter] = useState<FilterOption>('anyone')
   const [azSorted, setAzSorted] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showOpenModal, setShowOpenModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [modalTab, setModalTab] = useState<ModalTab>('recent')
   const [modalSearch, setModalSearch] = useState('')
+
+  // ─── Fetch projects from /api/projects on mount ───
+  const refreshProjects = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/projects', { cache: 'no-store' })
+      if (!res.ok) return
+      const data = await res.json()
+      if (Array.isArray(data.projects)) {
+        setProjects(
+          data.projects.map((p: { id: string; name: string; updatedAt: string; description?: string | null; _count?: { tabs?: number } }) => ({
+            id: p.id,
+            name: p.name,
+            modified: formatRelativeTime(p.updatedAt),
+            words: '0',
+            offline: false,
+            owner: 'me' as const,
+            starred: false,
+          }))
+        )
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshProjects()
+  }, [refreshProjects])
 
   let filtered = projects.filter((p) => {
     if (filter === 'me' && p.owner !== 'me') return false
@@ -65,26 +98,77 @@ export function ProjectsDashboard() {
     setProjects((prev) => prev.map((p) => p.id === id ? { ...p, offline: !p.offline } : p))
   }
 
-  function toggleStarred(id: string) {
+  async function toggleStarred(id: string) {
+    // Optimistic update — no backend endpoint yet for star toggle
     setProjects((prev) => prev.map((p) => p.id === id ? { ...p, starred: !p.starred } : p))
   }
 
-  function renameProject(id: string) {
+  async function renameProject(id: string) {
     const newName = prompt('Rename project:')
-    if (newName?.trim()) {
-      setProjects((prev) => prev.map((p) => p.id === id ? { ...p, name: newName.trim() } : p))
+    if (!newName?.trim()) return
+    // Optimistic update
+    setProjects((prev) => prev.map((p) => p.id === id ? { ...p, name: newName.trim() } : p))
+    try {
+      await fetch(`/api/projects/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() }),
+      })
+    } catch {
+      toast.error('Failed to rename on server.')
     }
   }
 
-  function removeProject(id: string) {
+  async function removeProject(id: string) {
     if (!confirm('Remove this project?')) return
+    // Optimistic remove
     setProjects((prev) => prev.filter((p) => p.id !== id))
+    try {
+      await fetch(`/api/projects/${id}`, { method: 'DELETE' })
+      toast.success('Project deleted.')
+    } catch {
+      toast.error('Failed to delete on server.')
+      refreshProjects() // restore on failure
+    }
   }
 
-  function createProject(name: string) {
-    const newProj: Project = { id: `p${Date.now()}`, name, modified: 'Just now', words: '0', offline: false, owner: 'me', starred: false }
-    setProjects((prev) => [newProj, ...prev])
-    toast.success(`Project "${name}" created.`)
+  // ─── Create project: POST to /api/projects ───
+  async function createProject(name: string) {
+    setCreating(true)
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      const data = await res.json()
+      if (res.ok && data?.project) {
+        const p = data.project
+        const newProj: Project = {
+          id: p.id,
+          name: p.name,
+          modified: 'Just now',
+          words: '0',
+          offline: false,
+          owner: 'me',
+          starred: false,
+        }
+        setProjects((prev) => [newProj, ...prev])
+        toast.success(`Project "${name}" created.`)
+        // Initialize the 12 default tabs for the new project
+        try {
+          await fetch(`/api/projects/${p.id}/tabs/init`, { method: 'POST' })
+        } catch {
+          // non-fatal
+        }
+      } else {
+        toast.error(data?.error || 'Failed to create project.')
+      }
+    } catch {
+      toast.error('Network error creating project.')
+    } finally {
+      setCreating(false)
+    }
   }
 
   const filterLabels: Record<FilterOption, string> = {
@@ -114,19 +198,31 @@ export function ProjectsDashboard() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-8 pt-8 pb-3 shrink-0">
+      <div className="px-4 md:px-8 pt-8 pb-3 shrink-0">
         <h1 className="text-2xl font-semibold text-zinc-100 mb-4">Projects</h1>
 
         {/* Single "+" create card */}
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="w-full bg-zinc-900/50 border border-zinc-800 hover:border-zinc-600 rounded-xl py-8 flex flex-col items-center justify-center transition group mb-6"
-        >
-          <div className="w-12 h-12 rounded-full bg-zinc-800 group-hover:bg-zinc-700 flex items-center justify-center transition">
-            <Plus className="w-6 h-6 text-zinc-400 group-hover:text-zinc-100 transition" />
-          </div>
-          <p className="text-xs text-zinc-600 mt-2">Create new project</p>
-        </button>
+        <div className="flex gap-3 mb-6">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex-1 bg-zinc-900/50 border border-zinc-800 hover:border-zinc-600 rounded-xl py-8 flex flex-col items-center justify-center transition group"
+          >
+            <div className="w-12 h-12 rounded-full bg-zinc-800 group-hover:bg-zinc-700 flex items-center justify-center transition">
+              <Plus className="w-6 h-6 text-zinc-400 group-hover:text-zinc-100 transition" />
+            </div>
+            <p className="text-xs text-zinc-600 mt-2">Create new project</p>
+          </button>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="flex-1 bg-zinc-900/50 border border-zinc-800 hover:border-purple-500/40 hover:bg-purple-500/5 rounded-xl py-8 flex flex-col items-center justify-center transition group"
+          >
+            <div className="w-12 h-12 rounded-full bg-zinc-800 group-hover:bg-purple-500/20 flex items-center justify-center transition">
+              <Upload className="w-6 h-6 text-zinc-400 group-hover:text-purple-300 transition" />
+            </div>
+            <p className="text-xs text-zinc-600 mt-2 group-hover:text-purple-300 transition">Import manuscript</p>
+            <p className="text-[10px] text-zinc-700 mt-0.5">.docx, .txt, or URL</p>
+          </button>
+        </div>
 
         {/* Toolbar */}
         <div className="flex items-center justify-between mb-4">
@@ -193,9 +289,14 @@ export function ProjectsDashboard() {
       </div>
 
       {/* Projects display */}
-      <div className="flex-1 overflow-y-auto lc-scroll px-8 pb-8">
+      <div className="flex-1 overflow-y-auto lc-scroll px-4 md:px-8 pb-8">
         <h2 className="text-sm font-semibold text-zinc-300 mb-3">Recent projects</h2>
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12 text-zinc-500">
+            <Loader2 className="w-5 h-5 animate-spin mb-2" />
+            <p className="text-xs">Loading projects…</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="text-center py-12 text-zinc-600 text-sm">No projects found.</div>
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -334,8 +435,40 @@ export function ProjectsDashboard() {
           </div>
         </div>
       )}
+
+      {/* Smart Import Modal */}
+      {showImportModal && (
+        <SmartImportModal
+          onClose={() => setShowImportModal(false)}
+          onImported={() => {
+            // The import route creates the project on the server, so we
+            // just need to refresh the list from /api/projects.
+            refreshProjects()
+          }}
+        />
+      )}
     </div>
   )
+}
+
+// Format an ISO timestamp as a short relative time string.
+function formatRelativeTime(iso: string): string {
+  try {
+    const d = new Date(iso)
+    const now = Date.now()
+    const diffMs = now - d.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    if (diffMin < 1) return 'Just now'
+    if (diffMin < 60) return `${diffMin}m`
+    const diffHr = Math.floor(diffMin / 60)
+    if (diffHr < 24) return `${diffHr}h`
+    const diffDay = Math.floor(diffHr / 24)
+    if (diffDay === 1) return 'Yesterday'
+    if (diffDay < 7) return `${diffDay}d`
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  } catch {
+    return ''
+  }
 }
 
 // ═══ PROJECT CONTEXT MENU (with fixed offline toggle) ═══

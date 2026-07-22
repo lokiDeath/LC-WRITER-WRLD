@@ -14,14 +14,13 @@ export type Account = {
 const STORAGE_KEY = 'lc_accounts'
 const ACTIVE_KEY = 'lc_active_account'
 
-const DEFAULT_ACCOUNTS: Account[] = [
-  { id: 'a1', username: 'L.U.C.I.A.N', email: 'luckydeath1975@gmail.com', displayName: 'Lucian', plan: 'Free' },
-  { id: 'a2', username: 'lucian1975', email: 'lucian1975@gmail.com', displayName: 'Lucian Jr.', plan: 'Free' },
-]
+// Empty default - no mock accounts. The sidebar profile will be hydrated
+// from the actual logged-in user via the Dashboard component.
+const DEFAULT_ACCOUNTS: Account[] = []
 
 export function useAccounts() {
   const [accounts, setAccounts] = useState<Account[]>(DEFAULT_ACCOUNTS)
-  const [activeAccountId, setActiveAccountId] = useState<string>('a1')
+  const [activeAccountId, setActiveAccountId] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
 
   // Load from localStorage on mount

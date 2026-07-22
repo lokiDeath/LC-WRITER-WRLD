@@ -109,12 +109,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Bump conversation updatedAt
     await db.conversation.update({ where: { id }, data: { updatedAt: new Date() } })
 
-    // Simulate async delivery/read receipt progression
-    setTimeout(async () => {
-      try {
-        await db.directMessage.update({ where: { id: msg.id }, data: { receipt: 'delivered' } })
-      } catch {}
-    }, 800)
+    // Mark the message as delivered — fire-and-forget without setTimeout (Vercel kills background timers)
+    db.directMessage.update({ where: { id: msg.id }, data: { receipt: 'delivered' } }).catch(() => {})
 
     return NextResponse.json({ message: msg })
   } catch (err) {
