@@ -32,14 +32,15 @@ TONE: Witty, literary, direct. Not chatty. Not chirpy. You are a senior editor w
 type ChatMessage = { role: string; content: string }
 
 const MODEL_IDS: Record<string, string> = {
-  'flash-lite': 'gemini-1.5-flash-latest',
-  '3.1 Flash-Lite': 'gemini-1.5-flash-latest',
-  flash: 'gemini-1.5-flash-latest',
-  '3.5 Flash': 'gemini-1.5-flash-latest',
-  pro: 'gemini-1.5-pro-latest',
-  '3.1 Pro': 'gemini-1.5-pro-latest',
-  thinking: 'gemini-1.5-pro-latest',
-  'Extended Thinking': 'gemini-1.5-pro-latest',
+  'flash-lite': 'gemini-3.5-flash-lite',
+  '3.1 Flash-Lite': 'gemini-3.5-flash-lite',
+  '3.5 Flash-Lite': 'gemini-3.5-flash-lite',
+  flash: 'gemini-3.5-flash',
+  '3.5 Flash': 'gemini-3.5-flash',
+  pro: 'gemini-3.1-pro-preview',
+  '3.1 Pro': 'gemini-3.1-pro-preview',
+  thinking: 'gemini-3.1-pro-preview',
+  'Extended Thinking': 'gemini-3.1-pro-preview',
 }
 
 function resolveModel(model: unknown) {
@@ -64,7 +65,7 @@ function getPublicErrorMessage(err: unknown) {
   }
 
   if (lower.includes('not found') || lower.includes('not supported') || lower.includes('model')) {
-    return 'Google rejected the model name. This deployment must use gemini-1.5-flash-latest or gemini-1.5-pro-latest.'
+    return 'Google rejected the model name. This deployment must use gemini-3.5-flash-lite, gemini-3.5-flash, or gemini-3.1-pro-preview.'
   }
 
   if (lower.includes('permission') || lower.includes('403')) {

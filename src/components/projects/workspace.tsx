@@ -272,7 +272,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
     setShowSceneResults(false)
   }
 
-  // ─── Chat handlers (wired to /api/chat with hardcoded gemini-1.5-pro-latest model) ───
+  // ─── Chat handlers (wired to /api/chat with hardcoded Gemini Pro model) ───
   async function handleChatSend(overrideInput?: string) {
     const text = (overrideInput ?? chatInput).trim()
     if (!text || sending) return
@@ -285,7 +285,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // Hardcoded model label: backend resolves this to gemini-1.5-pro-latest for Project Co-Pilot.
+          // Hardcoded model label: backend resolves this to gemini-3.1-pro-preview for Project Co-Pilot.
           model: '3.1 Pro',
           messages: [...messages.filter((m) => m.id !== 'greeting'), userMsg].map((m) => ({
             role: m.role,
@@ -855,7 +855,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
           }}
         />
 
-        {/* ═══ RIGHT: PERMANENT AI CO-PILOT (locked to gemini-1.5-pro-latest) ═══ */}
+        {/* ═══ RIGHT: PERMANENT AI CO-PILOT (locked to gemini-3.1-pro-preview) ═══ */}
         <div
           className="shrink-0 bg-black border-l border-[#1a1a1a] flex flex-col max-lg:hidden"
           style={{ width: copilotWidth }}
@@ -866,7 +866,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
             <span className="text-[12px] font-semibold text-zinc-200">AI Co-Pilot</span>
             <span
               className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded ml-auto"
-              title="Locked to gemini-1.5-pro-latest for project context"
+              title="Locked to gemini-3.1-pro-preview for project context"
             >
               {projectName.slice(0, 12)}
               {projectName.length > 12 ? '…' : ''}
