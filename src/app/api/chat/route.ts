@@ -278,6 +278,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const persistProjectChat = purpose === 'copilot' && Boolean(projectId)
+
     const genAI = new GoogleGenerativeAI(API_KEY)
     const model = genAI.getGenerativeModel({
       model: modelId,
@@ -298,6 +300,12 @@ export async function POST(req: NextRequest) {
       if (!hasImages) {
         return streamError('The final message is empty.', 400)
       }
+    }
+
+    if (persistProjectChat && projectId) {
+      await db.projectChatMessage.create({
+        data: { projectId, userId: user.id, role: 'user', content: String(last.content || '') },
+      })
     }
 
     // ─── Persist the user message to DB (if sessionId provided) ───
@@ -355,6 +363,15 @@ export async function POST(req: NextRequest) {
             } catch (err) {
               console.error('[chat] assistant message persist error:', err)
               // non-fatal
+            }
+          }
+          if (persistProjectChat && projectId && fullResponse.trim()) {
+            try {
+              await db.projectChatMessage.create({
+                data: { projectId, userId: user.id, role: 'assistant', content: fullResponse },
+              })
+            } catch (err) {
+              console.error('[chat] project response persist error:', err)
             }
           }
         } catch (err) {

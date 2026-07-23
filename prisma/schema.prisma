@@ -46,6 +46,7 @@ model User {
   conversations       ConversationMember[]
   sentMessages        DirectMessage[] @relation("MessageSender")
   projects            Project[]
+  projectChatMessages ProjectChatMessage[]
   auditLogs           AuditLog[]  @relation("AuditActor")
 
   // Legacy novel-related (kept from earlier iteration)
@@ -294,6 +295,8 @@ model Project {
 
   owner   User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   tabs    ProjectTab[]
+  chapters ProjectChapter[]
+  chatMessages ProjectChatMessage[]
 
   @@index([ownerId])
 }
@@ -313,6 +316,35 @@ model ProjectTab {
 
   @@unique([projectId, tabKey])
   @@index([projectId])
+}
+
+model ProjectChapter {
+  id         String   @id @default(cuid())
+  projectId  String
+  title      String
+  content    String   @default("")
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, orderIndex])
+}
+
+model ProjectChatMessage {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@index([userId])
 }
 
 // ─────────────────────────────────────────────────────────────

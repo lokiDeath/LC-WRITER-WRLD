@@ -122,8 +122,33 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
         const next: Record<string, string> = {}
         for (const tab of data.project?.tabs || []) next[tab.tabKey] = tab.content || ''
         setTabContent(next)
+        setChapters((data.project?.chapters || []).map((chapter: { id: string; title: string; content: string }) => ({
+          id: chapter.id,
+          name: chapter.title,
+          content: chapter.content,
+        })))
       })
       .catch(() => toast.error('Unable to load this project.'))
+    return () => { cancelled = true }
+  }, [projectId])
+
+  useEffect(() => {
+    if (!projectId) return
+    let cancelled = false
+    fetch(`/api/projects/${projectId}/chat`, { cache: 'no-store' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Unable to load project chat')
+        return res.json()
+      })
+      .then((data) => {
+        if (cancelled || !Array.isArray(data.messages) || data.messages.length === 0) return
+        setMessages(data.messages.map((message: { id: string; role: string; content: string }) => ({
+          id: message.id,
+          role: message.role === 'assistant' ? 'assistant' : 'user',
+          content: message.content,
+        })))
+      })
+      .catch(() => toast.error('Unable to load this project conversation.'))
     return () => { cancelled = true }
   }, [projectId])
 
@@ -323,7 +348,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
           // Project Co-Pilot: hardcoded to gemini-1.5-pro + novel-writer
           // system prompt on the backend via purpose: 'copilot'.
           purpose: 'copilot',
-          messages: [...messages.filter((m) => m.id !== 'greeting'), userMsg].map((m) => ({
+          messages: [...messages.filter((m) => m.id !== 'greeting').slice(-39), userMsg].map((m) => ({
             role: m.role,
             content: m.content,
           })),
@@ -461,7 +486,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   }
 
   // ─── Chapter Slicing (non-destructive) ───
-  function runChapterSlicer(opts: { mode: 'fixed-count' | 'words-per'; count?: number; words?: number }) {
+  async function runChapterSlicer(opts: { mode: 'fixed-count' | 'words-per'; count?: number; words?: number }) {
     if (!editor) return
     // Get the FULL WRITING text (NOT the editor's current content — that would mutate it).
     // We use the cached full-writing content; if missing, fall back to editor HTML.
@@ -505,7 +530,26 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
     }
 
     // Append the new chapters (non-destructive — original Full Writing is untouched)
-    setChapters((prev) => [...prev, ...newChapters])
+    if (projectId) {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/chapters`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chapters: newChapters.map((chapter) => ({ title: chapter.name, content: chapter.content })) }),
+        })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(data.error || 'Unable to save chapters')
+        const persisted = (data.chapters || []).map((chapter: { id: string; title: string; content: string }) => ({
+          id: chapter.id, name: chapter.title, content: chapter.content,
+        }))
+        setChapters((prev) => [...prev, ...persisted])
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Unable to save chapter slices.')
+        return
+      }
+    } else {
+      setChapters((prev) => [...prev, ...newChapters])
+    }
     // Insert a visual bookmark divider where slicing ended in the Full Writing
     setImportMarker(wordCount)
     toast.success(

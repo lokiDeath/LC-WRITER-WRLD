@@ -11,7 +11,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params
     const project = await db.project.findUnique({
       where: { id },
-      include: { tabs: { orderBy: { orderIndex: 'asc' } } },
+      include: {
+        tabs: { orderBy: { orderIndex: 'asc' } },
+        chapters: { orderBy: { orderIndex: 'asc' } },
+      },
     })
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     if (project.ownerId !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
