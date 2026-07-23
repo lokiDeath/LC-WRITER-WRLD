@@ -8,7 +8,7 @@ import { useApp } from '@/lib/store'
 import { ChatInput, type AIModel, type UploadedImage } from './chat-input'
 
 // Default model object kept for backwards compatibility with ChatInput's
-// optional selectedModel prop. The backend is hardcoded to gemini-2.0-flash
+// optional selectedModel prop. The backend is hardcoded to gemini-1.5-flash
 // for the Main Chat — this object is NOT used to select a model anymore.
 const DEFAULT_MODEL: AIModel = {
   id: 'main',
@@ -198,7 +198,7 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
       const sid = await ensureSession(text || 'Image chat')
 
       // Build the payload for /api/chat. The Main Chat sends purpose: 'main'
-      // which the backend uses to select gemini-2.0-flash + the generic
+      // which the backend uses to select gemini-1.5-flash + the generic
       // assistant system prompt.
       const payload: {
         purpose: 'main'
@@ -248,18 +248,12 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
         )
       }
     } catch (err) {
-      // Surface the EXACT backend error. The backend already returns a
-      // human-readable error string with the upstream Gemini message in it;
-      // we never paper over it with a generic "Network error" string.
-      let message = 'The AI request failed.'
-      if (err instanceof Error && err.message) {
-        message = err.message
-      } else if (typeof err === 'string' && err) {
-        message = err
-      }
+      const message = err instanceof Error ? err.message : 'Network error reaching the AI service.'
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantId ? { ...msg, content: message } : msg
+          msg.id === assistantId
+            ? { ...msg, content: `${message} Please check your API key and try again.` }
+            : msg
         )
       )
     } finally {

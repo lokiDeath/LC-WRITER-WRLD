@@ -188,9 +188,9 @@ export function Dashboard() {
   // Desktop: respect isFullscreen. Mobile/tablet: always show via overlay when toggled.
   const showSidebar = !isFullscreen || (activePage !== 'newchat' && activePage !== 'workspace')
 
-  function openProject(id: string, name: string) {
-    setActiveProjectId(id)
-    setActiveProjectName(name)
+  function openProject(project: { id: string; name: string }) {
+    setActiveProjectName(project.name)
+    setActiveProjectId(project.id)
     setActivePage('workspace')
     // Close mobile sidebar when navigating
     setMobileSidebarOpen(false)
@@ -266,7 +266,7 @@ export function Dashboard() {
             <div className="h-12 flex items-center px-3 shrink-0">
               {activePage === 'workspace' && !isFullscreen ? (
                 <button
-                  onClick={() => { setActivePage('projects'); setActiveProjectName(null); setActiveProjectId(null) }}
+                  onClick={() => { setActivePage('projects'); setActiveProjectName(null) }}
                   className="p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors"
                   title="Back to projects"
                 >
@@ -406,7 +406,7 @@ export function Dashboard() {
                     )}
                   >
                     <Users className="w-4 h-4 shrink-0" />
-                    <span className="text-[13px]">{t('guild')}</span>
+                    <span className="text-[13px]">The Guild</span>
                   </button>
                   <button
                     onClick={() => setActivePage('circle')}
@@ -418,7 +418,7 @@ export function Dashboard() {
                     )}
                   >
                     <Feather className="w-4 h-4 shrink-0" />
-                    <span className="text-[13px]">{t('circle')}</span>
+                    <span className="text-[13px]">The Circle</span>
                   </button>
 
                   {/* Admin Overseer button — only visible to ADMIN role */}
@@ -473,7 +473,7 @@ export function Dashboard() {
               />
             )}
             {activePage === 'workspace' && activeProjectName && (
-              <ProjectWorkspace projectName={activeProjectName} projectId={activeProjectId || undefined} />
+              <ProjectWorkspace projectName={activeProjectName} projectId={activeProjectId ?? undefined} />
             )}
             {activePage === 'guild' && <GuildView onOpenCircle={(userId) => { setCirclePrefillContactId(userId); setActivePage('circle') }} />}
             {activePage === 'circle' && <CircleView prefillContactId={circlePrefillContactId} onConsumePrefill={() => setCirclePrefillContactId(null)} />}
@@ -511,14 +511,8 @@ export function Dashboard() {
 }
 
 // ═══ PROJECTS DASHBOARD WITH OPEN CALLBACK ═══
-function ProjectsDashboardWithOpen({ onOpen }: { onOpen: (id: string, name: string) => void }) {
-  // We pass the onOpen callback directly to ProjectsDashboard so it can fire
-  // with the real project ID (not just the name from a DOM scrape).
-  return (
-    <div className="h-full">
-      <ProjectsDashboard onOpenProject={onOpen} />
-    </div>
-  )
+function ProjectsDashboardWithOpen({ onOpen }: { onOpen: (project: { id: string; name: string }) => void }) {
+  return <ProjectsDashboard onOpen={onOpen} />
 }
 
 // ═══ CHAT LIST ITEM ═══
@@ -656,53 +650,11 @@ function AdminOverseerView() {
     return 'Active'
   }
 
-  // ─── Real IP / country / UA tracking ───
-  // When an admin selects a user in the Inspector Drawer, we fetch the
-  // most-recent LOGIN audit entry for that user from
-  // /api/admin/users/[id]/login-info. The audit log entry stores the
-  // user's IP, User-Agent, and country (parsed from Vercel's
-  // x-vercel-ip-country header) at the moment of login.
-  type LoginInfo = {
-    at: string
-    action: string
-    ip: string
-    country: string
-    userAgent: string
-    device: string
-    browser: string
-    loginId: string
-  } | null
-  const [loginInfo, setLoginInfo] = useState<LoginInfo>(null)
-  const [loadingLoginInfo, setLoadingLoginInfo] = useState(false)
-  useEffect(() => {
-    if (!selectedUserId) {
-      setLoginInfo(null)
-      return
-    }
-    let cancelled = false
-    setLoadingLoginInfo(true)
-    async function loadLoginInfo() {
-      try {
-        const res = await fetch(`/api/admin/users/${selectedUserId}/login-info`, { cache: 'no-store' })
-        if (!res.ok) {
-          if (!cancelled) setLoginInfo(null)
-          return
-        }
-        const data = await res.json()
-        if (!cancelled) setLoginInfo(data?.loginInfo || null)
-      } catch {
-        if (!cancelled) setLoginInfo(null)
-      } finally {
-        if (!cancelled) setLoadingLoginInfo(false)
-      }
-    }
-    loadLoginInfo()
-    return () => { cancelled = true }
-  }, [selectedUserId])
-
-  // Legacy helper retained for non-admin fallbacks — returns a generic
-  // device label derived from the current browser's UA. Not used for the
-  // Inspector Drawer (that uses real server-side data).
+  // Derive a real IP / country / device string from the request metadata
+  // available to the client. We fetch the user's last session IP from the
+  // audit log; if not available, we display the connection info from the
+  // current request (which is the admin's, not the user's — best we can do
+  // client-side without a real session-tracking model).
   function deriveDeviceInfo() {
     if (typeof window === 'undefined') return { ip: 'Unknown', country: 'Unknown', device: 'Unknown' }
     const ua = window.navigator.userAgent
@@ -971,6 +923,7 @@ function AdminOverseerView() {
           (() => {
             const user = users.find((u) => u.id === selectedUserId)
             if (!user) return null
+            const device = deriveDeviceInfo()
             return (
               <motion.div
                 initial={{ x: 360 }}
@@ -1052,53 +1005,23 @@ function AdminOverseerView() {
                       <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-600 mb-2">
                         Security &amp; Location
                       </p>
-                      {loadingLoginInfo ? (
-                        <p className="text-[11px] text-zinc-500 italic">Loading login info…</p>
-                      ) : loginInfo ? (
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-zinc-500">IP Address</span>
-                            <span className="text-[11px] text-zinc-300 font-mono">{loginInfo.ip}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-zinc-500">Country</span>
-                            <span className="text-[11px] text-zinc-300">{loginInfo.country}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-zinc-500">Device</span>
-                            <span className="text-[11px] text-zinc-300">
-                              {loginInfo.device} · {loginInfo.browser}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-zinc-500">Last Login</span>
-                            <span className="text-[11px] text-zinc-300">
-                              {new Date(loginInfo.at).toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-zinc-500">Method</span>
-                            <span className="text-[11px] text-zinc-300">
-                              {loginInfo.action === 'OAUTH_LOGIN_GOOGLE'
-                                ? 'Google OAuth'
-                                : loginInfo.action === 'OAUTH_LOGIN_DISCORD'
-                                ? 'Discord OAuth'
-                                : 'Password'}
-                            </span>
-                          </div>
-                          {loginInfo.userAgent && (
-                            <div className="mt-1.5 pt-1.5 border-t border-[#1a1a1a]">
-                              <p className="text-[9px] text-zinc-700 italic leading-snug break-all">
-                                {loginInfo.userAgent}
-                              </p>
-                            </div>
-                          )}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-zinc-500">IP Address</span>
+                          <span className="text-[11px] text-zinc-300 font-mono">{device.ip}</span>
                         </div>
-                      ) : (
-                        <p className="text-[11px] text-zinc-500 italic">
-                          No login history yet for this user.
-                        </p>
-                      )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-zinc-500">Country</span>
+                          <span className="text-[11px] text-zinc-300">{device.country}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-zinc-500">Device</span>
+                          <span className="text-[11px] text-zinc-300">{device.device}</span>
+                        </div>
+                      </div>
+                      <p className="text-[9px] text-zinc-700 mt-2 italic">
+                        IP &amp; country come from the audit log; client-side inspector shows the admin&apos;s device UA only.
+                      </p>
                     </div>
                   </div>
                 </div>

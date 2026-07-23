@@ -18,7 +18,7 @@ The build will succeed with zero env vars set (all use `|| ''` fallbacks), but t
 |---|---|---|
 | `DATABASE_URL` | ✅ REQUIRED | Prisma PostgreSQL connection string |
 | `DIRECT_URL` | ✅ REQUIRED | Direct DB connection for migrations (can match `DATABASE_URL`) |
-| `ZAI_API_KEY` | Recommended | Powers `/api/chat`, `/api/studio/import`, image generation fallback |
+| `GEMINI_API_KEY` | Required for AI | Google AI Studio key for `/api/chat` and `/api/studio/import` |
 | `FAL_KEY` | Optional | Image generation via Fal.ai (priority 1) |
 | `RUNPOD_API_KEY` + `RUNPOD_ENDPOINT_ID` | Optional | Image generation via RunPod (priority 2) |
 | `COMFYUI_HOST` | Optional | Image generation via ComfyUI (priority 3) |
@@ -114,7 +114,7 @@ The app is fully responsive across mobile, tablet, and desktop:
 - **Framework**: Next.js 16 (App Router, Turbopack)
 - **Runtime**: Bun (faster) or npm (compatible)
 - **DB**: PostgreSQL via Prisma 6
-- **AI**: Z.AI SDK (`z-ai-web-dev-sdk`) — Gemini 3.x models
+- **AI**: Google Gemini API (`@google/generative-ai`) — Gemini 2.5 Flash and Pro
 - **Editor**: TipTap (StarterKit + Underline + TextAlign + CharacterCount + Placeholder)
 - **Styling**: Tailwind CSS 4 + tw-animate-css
 - **State**: Zustand (client) + Prisma (server)

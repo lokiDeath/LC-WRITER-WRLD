@@ -3,8 +3,6 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
-  try {
-
   const user = await getCurrentUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { searchParams } = new URL(req.url)
@@ -14,15 +12,9 @@ export async function GET(req: NextRequest) {
   if (!novel || novel.authorId !== user.id) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
   const items = await db.plotThread.findMany({ where: { novelId }, orderBy: { importance: 'desc' } })
   return NextResponse.json({ items })
-  } catch (err) {
-    console.error('[plot] error:', err)
-    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
-  }
 }
 
 export async function POST(req: NextRequest) {
-  try {
-
   const user = await getCurrentUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch(() => ({}))
@@ -34,8 +26,4 @@ export async function POST(req: NextRequest) {
     data: { novelId, title, type: type || 'main', status: status || 'open', importance: importance || 3, description: description || '', authorId: user.id },
   })
   return NextResponse.json({ item })
-  } catch (err) {
-    console.error('[plot] error:', err)
-    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
-  }
 }

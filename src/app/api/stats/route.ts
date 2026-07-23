@@ -3,8 +3,6 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
-  try {
-
   const user = await getCurrentUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { searchParams } = new URL(req.url)
@@ -41,8 +39,4 @@ export async function GET(req: NextRequest) {
     recentChapters: chapters,
     recentSessions: sessions,
   })
-  } catch (err) {
-    console.error('[stats] error:', err)
-    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
-  }
 }

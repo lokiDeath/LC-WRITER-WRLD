@@ -22,7 +22,7 @@ Output rules:
 - If the user attached an image, look at it carefully and describe or answer about it in plain text.`
 
 // PROJECT CO-PILOT (inside the workspace) — elite fiction co-writer, NOVEL-WRITER persona.
-// Locked to gemini-2.5-pro (Google deprecated the 1.5 series).
+// This persona is used only by the project-scoped co-pilot.
 const NOVEL_PARTNER_SYSTEM = `You are Lucian (called "L-C"), an elite fiction writing partner and editor integrated into a private author platform.
 
 YOUR ROLE:
@@ -35,7 +35,7 @@ CORE PRINCIPLES:
 2. PERFECT MEMORY: You are given the active novel's chapters and character files as context. Treat them as canon. Never invent contradictions. If a fact is missing, ask before assuming.
 3. PRECISE EDITING: When asked to critique, be specific and honest. Identify plot holes, weak transitions, inconsistent characterization, prose that tells instead of shows. Quote the offending lines. Suggest concrete fixes.
 4. PACING: Do not rush endings. Do not solve problems the author has not asked you to solve. When co-writing, match the author's sentence-by-sentence rhythm and wait for direction.
-5. STRUCTURE: For long outputs, use clear paragraph breaks. For analysis, write short labelled sections in plain text (e.g. a section title on its own line, followed by paragraphs). Quote source text when referencing specific passages.
+5. STRUCTURE: For long outputs, use clear paragraph breaks. For analysis, use headers and short bullets. Quote source text when referencing specific passages.
 
 OPERATING RULES:
 - If asked who created you, answer: "L."
@@ -53,18 +53,12 @@ Output rules:
 // ─────────────────────────────────────────────────────────────
 // MODEL RESOLUTION
 // ─────────────────────────────────────────────────────────────
-// Google has deprecated the entire gemini-1.5-* series; requests to those
-// model IDs now return 404 ("models/gemini-1.5-flash is not found for API
-// version v1beta"). The current stable replacements are:
-//   • Main Chat      → gemini-2.0-flash      (fast, multimodal, cheap)
-//   • Project Co-Pilot → gemini-2.5-pro        (reasoning-strong, larger ctx)
-// Both are publicly available on the v1beta Generative Language API as of
-// 2025-Q4 and are wired through @google/generative-ai >= 0.21.
-// The `purpose` field in the request body selects which persona+model to use.
+// The `purpose` field selects the general-chat or project co-pilot model.
 type Purpose = 'main' | 'copilot'
 
-const MAIN_CHAT_MODEL = 'gemini-2.0-flash'
-const COPILOT_MODEL = 'gemini-2.5-pro'
+// Gemini 1.5 models were shut down. These stable models work with AI Studio keys.
+const MAIN_CHAT_MODEL = process.env.GEMINI_MAIN_MODEL || 'gemini-2.5-flash'
+const COPILOT_MODEL = process.env.GEMINI_COPILOT_MODEL || 'gemini-2.5-pro'
 
 function resolveModel(purpose: Purpose): string {
   return purpose === 'copilot' ? COPILOT_MODEL : MAIN_CHAT_MODEL
@@ -82,32 +76,23 @@ function streamError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status })
 }
 
-// Surface the EXACT upstream error to the frontend so the user (and the
-// Vercel logs) can see what Google actually said. We append a short hint
-// for the most common failure modes (invalid key, quota, model 404) but
-// we always keep the raw upstream message — never replace it with a vague
-// "Network error" string.
-function getPublicErrorMessage(err: unknown): string {
+function getPublicErrorMessage(err: unknown) {
   const raw = err instanceof Error ? err.message : String(err)
   const lower = raw.toLowerCase()
 
   if (lower.includes('api_key_invalid') || lower.includes('api key not valid')) {
-    return `${raw} — The AI service rejected the API key. Create a fresh AI Studio key, save it as GOOGLE_API_KEY (or GEMINI_API_KEY) in Vercel, then redeploy.`
+    return 'The AI service rejected the API key. Create a fresh AI Studio key, save it as GOOGLE_API_KEY (or GEMINI_API_KEY) in Vercel, then redeploy.'
   }
 
   if (lower.includes('permission') || lower.includes('403')) {
-    return `${raw} — The AI service denied permission for this key. Enable the Generative Language API for the project, remove incompatible key restrictions, then redeploy.`
+    return 'The AI service denied permission for this key. Enable the Generative Language API for the project, remove incompatible key restrictions, then redeploy.'
   }
 
   if (lower.includes('quota') || lower.includes('429') || lower.includes('billing')) {
-    return `${raw} — The AI service refused the request because of quota or billing limits on this API key.`
+    return 'The AI service refused the request because of quota or billing limits on this API key.'
   }
 
-  if (lower.includes('not found') && lower.includes('model')) {
-    return `${raw} — The requested model is not available on this API key. Verify GOOGLE_API_KEY has access to gemini-2.0-flash and gemini-2.5-pro.`
-  }
-
-  return raw || 'The AI request failed on the server.'
+  return 'The AI request failed on the server. Check the AI service key and try again.'
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -187,6 +172,25 @@ Context ends.`
   return ''
 }
 
+async function buildProjectMemoryContext(userId: string, projectId: string) {
+  const project = await db.project.findFirst({
+    where: { id: projectId, ownerId: userId },
+    include: { tabs: { orderBy: { orderIndex: 'asc' } } },
+  })
+  if (!project) return null
+
+  const tabs = project.tabs
+    .filter((tab) => tab.content.trim())
+    .map((tab) => {
+      const content = tab.content.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+        .slice(0, tab.tabKey === 'full-writing' ? 18000 : 6000)
+      return `${tab.title}:\n${content}`
+    })
+    .join('\n\n')
+
+  return `\n\nActive project context begins.\nProject: ${project.name}\n\n${tabs}\n\nContext ends.`
+}
+
 // ─────────────────────────────────────────────────────────────
 // Multimodal message part types
 // ─────────────────────────────────────────────────────────────
@@ -253,6 +257,7 @@ export async function POST(req: NextRequest) {
     const purpose: Purpose = body.purpose === 'copilot' ? 'copilot' : 'main'
     const messages = (body.messages || []) as IncomingMessage[]
     const novelId = typeof body.novelId === 'string' ? body.novelId : undefined
+    const projectId = typeof body.projectId === 'string' ? body.projectId : undefined
     const sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined
     const modelId = resolveModel(purpose)
     const systemPrompt = resolveSystemPrompt(purpose)
@@ -262,9 +267,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Build memory context ONLY for the Co-Pilot. Main chat has no novel context.
-    const memoryContext = purpose === 'copilot'
-      ? await buildMemoryContext(user.id, novelId, body.novelContext)
-      : ''
+    let memoryContext = ''
+    if (purpose === 'copilot') {
+      if (projectId) {
+        const projectContext = await buildProjectMemoryContext(user.id, projectId)
+        if (projectContext === null) return streamError('Project not found.', 404)
+        memoryContext = projectContext
+      } else {
+        memoryContext = await buildMemoryContext(user.id, novelId, body.novelContext)
+      }
+    }
 
     const genAI = new GoogleGenerativeAI(API_KEY)
     const model = genAI.getGenerativeModel({

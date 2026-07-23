@@ -3,8 +3,6 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-
   const user = await getCurrentUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
@@ -17,8 +15,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { novelId: id, title, orderIndex: orderIndex ?? 0, pov: pov || null, arc: arc || null },
   })
   return NextResponse.json({ chapter })
-  } catch (err) {
-    console.error('[novels:[id]:chapters] error:', err)
-    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
-  }
 }

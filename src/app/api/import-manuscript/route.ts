@@ -4,13 +4,8 @@ import { NextRequest, NextResponse } from 'next/server'
 // The spec explicitly mentions /api/import-manuscript; this keeps both
 // paths available so existing clients and new ones both work.
 export async function POST(req: NextRequest) {
-  try {
-    const { POST: studioImport } = await import('@/app/api/studio/import/route')
-    return studioImport(req)
-  } catch (err) {
-    console.error('[import-manuscript] error:', err)
-    return NextResponse.json({ error: 'Import failed.' }, { status: 500 })
-  }
+  const { POST: studioImport } = await import('@/app/api/studio/import/route')
+  return studioImport(req)
 }
 
 export async function GET() {

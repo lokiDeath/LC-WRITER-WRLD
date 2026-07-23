@@ -86,10 +86,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const [missingCounts, setMissingCounts] = useState<Record<string, number>>({})
   // Expand-modal state for chat input
   const [showChatExpand, setShowChatExpand] = useState(false)
-  // ─── DB persistence: loading + dirty flags ───
-  const [tabsLoaded, setTabsLoaded] = useState(false)
-  const dirtyTabsRef = useRef<Set<string>>(new Set())
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const dragRef = useRef<{ startX: number; startW: number } | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
@@ -111,6 +108,39 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
     setChapters([])
     setActiveChapter(null)
   }, [projectName, projectId])
+
+  useEffect(() => {
+    if (!projectId) return
+    let cancelled = false
+    fetch(`/api/projects/${projectId}`, { cache: 'no-store' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Unable to load project')
+        return res.json()
+      })
+      .then((data) => {
+        if (cancelled) return
+        const next: Record<string, string> = {}
+        for (const tab of data.project?.tabs || []) next[tab.tabKey] = tab.content || ''
+        setTabContent(next)
+      })
+      .catch(() => toast.error('Unable to load this project.'))
+    return () => { cancelled = true }
+  }, [projectId])
+
+  const saveTab = useCallback((tabKey: string, content: string) => {
+    if (!projectId) return
+    clearTimeout(saveTimers.current[tabKey])
+    saveTimers.current[tabKey] = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/tabs/${tabKey}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }),
+        })
+        if (!res.ok) throw new Error('Save failed')
+      } catch {
+        toast.error('Your project could not be saved. Please try again.')
+      }
+    }, 700)
+  }, [projectId])
 
   // ─── Resizable copilot ───
   useEffect(() => {
@@ -134,98 +164,6 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
   }, [messages, sending])
 
-  // ─── DB LOAD: fetch all 12 tabs for this project on mount ───
-  // Initializes the ProjectTab rows (idempotent) and returns the full set
-  // so the workspace can render with real persisted content instead of
-  // starting blank every time.
-  useEffect(() => {
-    if (!projectId) {
-      setTabsLoaded(true)
-      return
-    }
-    let cancelled = false
-    async function loadAllTabs() {
-      try {
-        // Initialize the 12 default tabs (idempotent on the server)
-        await fetch(`/api/projects/${projectId}/tabs/init`, { method: 'POST' }).catch(() => {})
-        const res = await fetch(`/api/projects/${projectId}`, { cache: 'no-store' })
-        if (!res.ok) return
-        const data = await res.json()
-        const tabs: Array<{ tabKey: string; content: string; metadata?: unknown }> = data?.project?.tabs || []
-        if (cancelled) return
-        const next: Record<string, string> = {}
-        for (const t of tabs) {
-          if (t.tabKey && typeof t.content === 'string') next[t.tabKey] = t.content
-        }
-        // Hydrate chapters from the full-writing metadata if present
-        let hydratedChapters: Chapter[] = []
-        let hydratedMarker: number | null = null
-        const fullWritingTab = tabs.find((t) => t.tabKey === 'full-writing')
-        if (fullWritingTab && fullWritingTab.metadata && typeof fullWritingTab.metadata === 'object') {
-          const md = fullWritingTab.metadata as { chapters?: Chapter[]; importMarker?: number | null }
-          if (Array.isArray(md.chapters)) hydratedChapters = md.chapters
-          if (typeof md.importMarker === 'number' || md.importMarker === null) hydratedMarker = md.importMarker
-        }
-        if (!cancelled) {
-          setTabContent((prev) => ({ ...next, ...prev }))
-          if (hydratedChapters.length > 0) setChapters(hydratedChapters)
-          if (hydratedMarker !== null) setImportMarker(hydratedMarker)
-          setTabsLoaded(true)
-        }
-      } catch {
-        if (!cancelled) setTabsLoaded(true)
-      }
-    }
-    loadAllTabs()
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
-
-  // ─── DB SAVE: debounced flush of dirty tabs ───
-  const flushDirtyTabs = useCallback(async () => {
-    if (!projectId) return
-    const dirty = Array.from(dirtyTabsRef.current)
-    if (dirty.length === 0) return
-    dirtyTabsRef.current.clear()
-    // If full-writing is dirty, also embed the current chapters + marker into metadata
-    const sendFullWritingMeta = dirty.includes('full-writing')
-    for (const key of dirty) {
-      try {
-        const body: Record<string, unknown> = { content: tabContent[key] || '' }
-        if (key === 'full-writing' && sendFullWritingMeta) {
-          body.metadata = { chapters, importMarker }
-        }
-        await fetch(`/api/projects/${projectId}/tabs/${key}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }).catch(() => {})
-      } catch {
-        // Re-mark as dirty so the next flush retries
-        dirtyTabsRef.current.add(key)
-      }
-    }
-  }, [projectId, tabContent, chapters, importMarker])
-
-  // Schedule a debounced save whenever tabContent/chapters/marker changes
-  useEffect(() => {
-    if (!tabsLoaded || !projectId) return
-    // Mark every tab that has a current entry as dirty on every change.
-    // The debounce below coalesces rapid edits into a single PUT per tab.
-    for (const key of Object.keys(tabContent)) dirtyTabsRef.current.add(key)
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => { flushDirtyTabs() }, 1200)
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    }
-  }, [tabContent, chapters, importMarker, tabsLoaded, projectId, flushDirtyTabs])
-
-  // Flush on unmount / project switch so the user never loses the last edit
-  useEffect(() => {
-    return () => { flushDirtyTabs() }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
-
   // ─── TipTap editor ───
   const editor = useEditor({
     extensions: [
@@ -248,8 +186,9 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
       },
     },
     onUpdate: ({ editor }) => {
-      // Persist content to local cache (non-destructive).
-      setTabContent((prev) => ({ ...prev, [activeTabId]: editor.getHTML() }))
+      const content = editor.getHTML()
+      setTabContent((prev) => ({ ...prev, [activeTabId]: content }))
+      saveTab(activeTabId, content)
     },
   })
 
@@ -381,24 +320,14 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // Project Co-Pilot: hardcoded to gemini-2.5-pro + novel-writer
+          // Project Co-Pilot: hardcoded to gemini-1.5-pro + novel-writer
           // system prompt on the backend via purpose: 'copilot'.
           purpose: 'copilot',
           messages: [...messages.filter((m) => m.id !== 'greeting'), userMsg].map((m) => ({
             role: m.role,
             content: m.content,
           })),
-          novelContext: {
-            projectName,
-            projectId,
-            activeTab: activeTabId,
-            fullWriting: (tabContent['full-writing'] || '').replace(/<[^>]+>/g, ' ').slice(0, 8000),
-            storyBible: (tabContent['story-bible'] || '').replace(/<[^>]+>/g, ' ').slice(0, 4000),
-            chapters: chapters.map((c) => ({
-              name: c.name,
-              content: c.content.replace(/<[^>]+>/g, ' ').slice(0, 2000),
-            })),
-          },
+          projectId,
         }),
       })
 
@@ -428,19 +357,13 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
         )
       }
     } catch (err) {
-      // Surface the EXACT backend error (e.g. "models/gemini-2.5-pro is not
-      // found ...") so the user can act on it. Never replace it with a vague
-      // "Network error" string.
-      const message =
-        (err instanceof Error && err.message) ||
-        (typeof err === 'string' && err) ||
-        'The AI request failed.'
       setMessages((prev) => [
         ...prev,
         {
           id: `a_${Date.now()}`,
           role: 'assistant',
-          content: message,
+          content:
+            'Network error reaching the AI service. Please check your connection and try again.',
         },
       ])
     } finally {
@@ -581,37 +504,10 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
       }
     }
 
-    if (sliceCount === 0) {
-      toast.error('Slicing produced no chapters.')
-      return
-    }
-
     // Append the new chapters (non-destructive — original Full Writing is untouched)
     setChapters((prev) => [...prev, ...newChapters])
-
-    // ─── Insert a VISUAL bookmark divider INTO the full-writing HTML at the
-    // position where slicing concluded. The original prose above is preserved
-    // byte-for-byte; we only append a clearly-marked divider element. This
-    // divider is part of the saved content, so it survives reloads. ───
-    const totalSlicedWords =
-      opts.mode === 'fixed-count'
-        ? words.length
-        : Math.min(words.length, sliceCount * (opts.words || 1))
-    const bookmarkHtml =
-      `<hr data-lc-bookmark="1" style="border: none; border-top: 2px dashed #a855f7; margin: 32px 0 16px 0;" />` +
-      `<p data-lc-bookmark-label="1" style="font-family: monospace; font-size: 10px; color: #a855f7; text-align: center; margin: 0 0 32px 0;">` +
-      `✓ Slicing bookmark — ${sliceCount} chapter${sliceCount !== 1 ? 's' : ''} extracted ` +
-      `(${totalSlicedWords.toLocaleString()} words). Original preserved above.` +
-      `</p>`
-    // Only insert the bookmark once — if there's already one, replace it.
-    const baseHtml = fullHtml.replace(/<hr data-lc-bookmark="1"[\s\S]*?data-lc-bookmark-label="1"[^>]*>[\s\S]*?<\/p>/g, '')
-    const updatedFullHtml = baseHtml + bookmarkHtml
-    setTabContent((prev) => ({ ...prev, 'full-writing': updatedFullHtml }))
-    // If the editor is currently showing full-writing, refresh its content
-    if (activeTabId === 'full-writing') {
-      editor.commands.setContent(updatedFullHtml, { emitUpdate: false })
-    }
-    setImportMarker(totalSlicedWords)
+    // Insert a visual bookmark divider where slicing ended in the Full Writing
+    setImportMarker(wordCount)
     toast.success(
       `Sliced ${sliceCount} chapter${sliceCount !== 1 ? 's' : ''}. Original Full Writing is preserved.`
     )
@@ -1182,14 +1078,8 @@ function CharacterCreationView() {
       } else {
         toast.error(data?.error || 'Image generation failed.')
       }
-    } catch (err) {
-      // Surface the EXACT error from the backend (e.g. "Fal.ai request
-      // failed: 401 ..."). Never paper over it with a generic string.
-      const message =
-        (err instanceof Error && err.message) ||
-        (typeof err === 'string' && err) ||
-        'Image generation request failed.'
-      toast.error(message)
+    } catch {
+      toast.error('Network error during image generation.')
     } finally {
       setGenerating(false)
     }

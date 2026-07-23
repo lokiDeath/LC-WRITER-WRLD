@@ -234,26 +234,6 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
     }
   }, [])
 
-  // ─── Hydrate the App Language dropdown from the saved language code ───
-  // The LanguageContext persists `lc_language` ('en' | 'es' | 'zh') in
-  // localStorage. Convert that back to the UI label so the dropdown shows
-  // the user's actual preference when the modal re-opens.
-  useEffect(() => {
-    try {
-      const code = localStorage.getItem('lc_language') as 'en' | 'es' | 'zh' | null
-      if (!code) return
-      const labelMap: Record<string, string> = {
-        en: 'English (US)',
-        es: 'Español',
-        zh: '简体中文',
-      }
-      const label = labelMap[code]
-      if (label) setAppLanguage(label)
-    } catch {
-      // ignore
-    }
-  }, [])
-
   // ─── Persist settings ───
   async function persistSettings(patch: Record<string, unknown>) {
     try {

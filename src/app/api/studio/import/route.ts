@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import ZAI from 'z-ai-web-dev-sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
+
+const API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ''
+const IMPORT_MODEL = process.env.GEMINI_IMPORT_MODEL || 'gemini-2.5-flash'
 
 const TAB_DEFS = [
   { key: 'full-writing', label: 'Full Writing', orderIndex: 0 },
@@ -33,10 +36,10 @@ Return ONLY a JSON object with these keys (omit any that have no content in the 
 If a category has no information in the source text, omit it entirely from the JSON. Do NOT include the "full-writing" key — that is handled separately. Do NOT include markdown fences. Output ONLY the raw JSON object.`
 
 export async function POST(req: NextRequest) {
-  try {
-    const user = await getCurrentUser(req)
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await getCurrentUser(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  try {
     const formData = await req.formData()
     const file = formData.get('file') as File | null
     const url = (formData.get('url') as string) || ''
@@ -87,24 +90,14 @@ export async function POST(req: NextRequest) {
       if (fname.endsWith('.txt') || fname.endsWith('.md')) {
         rawText = await file.text()
       } else if (fname.endsWith('.docx')) {
-        // Proper .docx text extraction via mammoth (parses the OOXML zip).
-        // Falls back to a regex-based heuristic if mammoth fails to load
-        // (e.g. on a serverless runtime that hasn't installed the dep yet).
+        // Lightweight .docx text extraction — read the document.xml from the zip
+        // Without a docx-parsing library, we extract raw text heuristically
         const buf = Buffer.from(await file.arrayBuffer())
-        try {
-          // Dynamic import so the route still compiles if mammoth is missing
-          // at type-check time. Once deployed, Vercel's `bun install` step
-          // installs mammoth from package.json before the build runs.
-          const mammoth = await import('mammoth')
-          const result = await mammoth.extractRawText({ buffer: buf })
-          rawText = result?.value || ''
-        } catch (mammothErr) {
-          console.error('[import] mammoth failed, using heuristic:', mammothErr)
-          // Last-resort heuristic — strip non-text bytes from the raw buffer.
-          const text = buf.toString('utf-8').replace(/[^\x20-\x7E\n\r]+/g, ' ')
-          const matches = text.match(/[A-Za-z][A-Za-z0-9 ,.;:!?"'()-]{15,}/g)
-          rawText = matches ? matches.join(' ') : ''
-        }
+        // Strip non-text bytes crudely — this won't be perfect but gets most prose
+        const text = buf.toString('utf-8').replace(/[^\x20-\x7E\n\r]+/g, ' ')
+        // Pull sequences of readable text
+        const matches = text.match(/[A-Za-z][A-Za-z0-9 ,.;:!?"'()-]{15,}/g)
+        rawText = matches ? matches.join(' ') : ''
       } else {
         // Try as text
         rawText = await file.text()
@@ -157,15 +150,14 @@ export async function POST(req: NextRequest) {
     // Run AI auto-sort to extract Characters / Lore / Locations / etc.
     let tabsExtracted = 1 // full-writing always
     try {
-      const zai = await ZAI.create()
-      const completion = await zai.chat.completions.create({
-        messages: [
-          { role: 'assistant', content: AUTO_SORT_SYSTEM },
-          { role: 'user', content: truncated },
-        ],
-        thinking: { type: 'disabled' },
+      if (!API_KEY) throw new Error('Missing GEMINI_API_KEY')
+      const model = new GoogleGenerativeAI(API_KEY).getGenerativeModel({
+        model: IMPORT_MODEL,
+        systemInstruction: AUTO_SORT_SYSTEM,
+        generationConfig: { responseMimeType: 'application/json' },
       })
-      const raw = completion.choices[0]?.message?.content || '{}'
+      const completion = await model.generateContent(truncated)
+      const raw = completion.response.text() || '{}'
       let cleaned = raw.trim()
       if (cleaned.startsWith('```')) {
         cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')

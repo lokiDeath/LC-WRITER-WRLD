@@ -37,22 +37,7 @@ export async function POST(req: NextRequest) {
     }
 
     const token = await createSession(user.id)
-    // ─── Log the user's IP / User-Agent / Country for the Admin Overseer ───
-    // Vercel sets x-forwarded-for + x-vercel-ip-country on every request.
-    // Cloudflare sets cf-ipcountry. We capture all three so the admin can
-    // surface them in the Inspector Drawer.
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim()
-      || req.headers.get('x-real-ip')
-      || 'unknown'
-    const userAgent = req.headers.get('user-agent') || ''
-    const country = req.headers.get('x-vercel-ip-country')
-      || req.headers.get('cf-ipcountry')
-      || 'unknown'
-    await logAudit(
-      user.id,
-      'LOGIN',
-      JSON.stringify({ ip, userAgent, country, loginId: user.loginId })
-    )
+    await logAudit(user.id, 'LOGIN', `${user.loginId} signed in`)
 
     const sessionUser = {
       id: user.id,
