@@ -178,27 +178,28 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
   }, [])
 
   // ─── Apply appearance changes to the root <html> element ───
-  // Sets BOTH the legacy .dark/.light class AND the canonical data-theme
-  // attribute so all CSS selectors (legacy + new) activate together.
   const applyAppearance = useCallback((mode: 'Default' | 'Dark' | 'Light') => {
     setAppearance(mode)
     try {
       const root = document.documentElement
-      const apply = (theme: 'light' | 'dark') => {
-        root.classList.remove('dark', 'light')
-        root.classList.add(theme)
-        root.setAttribute('data-theme', theme)
-      }
       if (mode === 'Light') {
-        apply('light')
+        root.classList.remove('dark')
+        root.classList.add('light')
         localStorage.setItem('lc_theme', 'light')
       } else if (mode === 'Dark') {
-        apply('dark')
+        root.classList.remove('light')
+        root.classList.add('dark')
         localStorage.setItem('lc_theme', 'dark')
       } else {
         // Default = system preference
         const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches
-        apply(prefersLight ? 'light' : 'dark')
+        if (prefersLight) {
+          root.classList.remove('dark')
+          root.classList.add('light')
+        } else {
+          root.classList.remove('light')
+          root.classList.add('dark')
+        }
         localStorage.removeItem('lc_theme')
       }
     } catch {

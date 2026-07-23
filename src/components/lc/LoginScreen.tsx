@@ -129,7 +129,7 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-app relative overflow-hidden">
+    <div className="min-h-screen bg-[#0a0908] relative overflow-hidden">
       <MercuryCanvas />
 
       {/* Content */}
@@ -138,10 +138,10 @@ export function LoginScreen() {
         <div className="flex-1 flex items-center justify-center p-6 md:p-8">
           <div className="w-full max-w-md">
             <div className="mb-10">
-              <h1 className="font-serif text-5xl text-t-primary tracking-wide mb-2">
+              <h1 className="font-serif text-5xl text-[#f8f5f2] tracking-wide mb-2">
                 {t('appName')}
               </h1>
-              <p className="font-mono text-xs text-t-secondary uppercase tracking-[0.25em]">
+              <p className="font-mono text-xs text-[#8a7c6b] uppercase tracking-[0.25em]">
                 {t('appTagline')}
               </p>
             </div>
@@ -149,14 +149,14 @@ export function LoginScreen() {
             <form onSubmit={handleSubmit} className="space-y-5">
               {mode === 'register' && (
                 <div>
-                  <label className="block font-mono text-[10px] text-t-secondary uppercase tracking-[0.2em] mb-2">
+                  <label className="block font-mono text-[10px] text-[#8a7c6b] uppercase tracking-[0.2em] mb-2">
                     {t('chooseUsername')}
                   </label>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="w-full bg-input border border-b-default px-4 py-3.5 text-sm text-t-primary font-mono placeholder:text-t-placeholder focus:border-b-focus focus:outline-none transition-colors rounded-md"
+                    className="w-full bg-[rgba(20,17,15,0.8)] border border-[rgba(201,169,110,0.2)] px-4 py-3.5 text-sm text-[#f8f5f2] font-mono placeholder:text-[#5d4037] focus:border-[#c9a96e] focus:outline-none transition-colors"
                     placeholder="scribe_scribe"
                     autoComplete="username"
                     autoFocus
@@ -166,14 +166,14 @@ export function LoginScreen() {
 
               {mode === 'login' && (
                 <div>
-                  <label className="block font-mono text-[10px] text-t-secondary uppercase tracking-[0.2em] mb-2">
+                  <label className="block font-mono text-[10px] text-[#8a7c6b] uppercase tracking-[0.2em] mb-2">
                     {t('usernameOrEmail')}
                   </label>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="w-full bg-input border border-b-default px-4 py-3.5 text-sm text-t-primary font-mono placeholder:text-t-placeholder focus:border-b-focus focus:outline-none transition-colors rounded-md"
+                    className="w-full bg-[rgba(20,17,15,0.8)] border border-[rgba(201,169,110,0.2)] px-4 py-3.5 text-sm text-[#f8f5f2] font-mono placeholder:text-[#5d4037] focus:border-[#c9a96e] focus:outline-none transition-colors"
                     placeholder="your_username"
                     autoComplete="username"
                     autoFocus
@@ -183,14 +183,14 @@ export function LoginScreen() {
 
               {mode === 'register' && (
                 <div>
-                  <label className="block font-mono text-[10px] text-t-secondary uppercase tracking-[0.2em] mb-2">
+                  <label className="block font-mono text-[10px] text-[#8a7c6b] uppercase tracking-[0.2em] mb-2">
                     {t('emailAddress')}
                   </label>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-input border border-b-default px-4 py-3.5 text-sm text-t-primary font-mono placeholder:text-t-placeholder focus:border-b-focus focus:outline-none transition-colors rounded-md"
+                    className="w-full bg-[rgba(20,17,15,0.8)] border border-[rgba(201,169,110,0.2)] px-4 py-3.5 text-sm text-[#f8f5f2] font-mono placeholder:text-[#5d4037] focus:border-[#c9a96e] focus:outline-none transition-colors"
                     placeholder="scribe@grandarchive.com"
                     autoComplete="email"
                   />
@@ -199,14 +199,14 @@ export function LoginScreen() {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block font-mono text-[10px] text-t-secondary uppercase tracking-[0.2em]">
+                  <label className="block font-mono text-[10px] text-[#8a7c6b] uppercase tracking-[0.2em]">
                     {mode === 'login' ? t('passphrase') : t('securePassphrase')}
                   </label>
                   {mode === 'login' && (
                     <button
                       type="button"
                       onClick={() => toast.info('Password recovery requires admin assistance. Contact the admin if you are locked out.')}
-                      className="font-mono text-[9px] text-t-muted hover:text-accent-color uppercase tracking-wider transition-colors"
+                      className="font-mono text-[9px] text-[#5d4037] hover:text-[#c9a96e] uppercase tracking-wider transition-colors"
                     >
                       {t('forgotPassphrase')}
                     </button>
@@ -217,14 +217,14 @@ export function LoginScreen() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-input border border-b-default px-4 py-3.5 pr-12 text-sm text-t-primary font-mono placeholder:text-t-placeholder focus:border-b-focus focus:outline-none transition-colors rounded-md"
+                    className="w-full bg-[rgba(20,17,15,0.8)] border border-[rgba(201,169,110,0.2)] px-4 py-3.5 pr-12 text-sm text-[#f8f5f2] font-mono placeholder:text-[#5d4037] focus:border-[#c9a96e] focus:outline-none transition-colors"
                     placeholder=""
                     autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-t-secondary hover:text-accent-color transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8a7c6b] hover:text-[#c9a96e] transition-colors"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
@@ -237,13 +237,13 @@ export function LoginScreen() {
               </div>
 
               {error && (
-                <p className="text-xs text-danger font-mono">{error}</p>
+                <p className="text-xs text-red-400 font-mono">{error}</p>
               )}
 
               <button
                 type="submit"
                 disabled={loading}
-                className="btn-accent w-full py-3.5 text-sm font-bold uppercase tracking-[0.3em] rounded-md"
+                className="w-full bg-[#C5A880] text-[#0a0908] py-3.5 text-sm font-bold uppercase tracking-[0.3em] hover:bg-[#d4b87a] transition-colors disabled:opacity-50"
               >
                 {loading
                   ? (mode === 'login' ? t('authenticating') : t('creatingAccount'))
@@ -253,23 +253,23 @@ export function LoginScreen() {
               {/* Toggle between login and register */}
               <div className="text-center pt-2">
                 {mode === 'login' ? (
-                  <p className="font-mono text-[10px] text-t-muted uppercase tracking-wider">
+                  <p className="font-mono text-[10px] text-[#5d4037] uppercase tracking-wider">
                     {t('noAccount')}{' '}
                     <button
                       type="button"
                       onClick={() => { setMode('register'); setError('') }}
-                      className="text-accent-color hover:opacity-80 underline uppercase tracking-wider"
+                      className="text-[#c9a96e] hover:text-[#d4b87a] underline uppercase tracking-wider"
                     >
                       {t('createOne')}
                     </button>
                   </p>
                 ) : (
-                  <p className="font-mono text-[10px] text-t-muted uppercase tracking-wider">
+                  <p className="font-mono text-[10px] text-[#5d4037] uppercase tracking-wider">
                     {t('alreadyRegistered')}{' '}
                     <button
                       type="button"
                       onClick={() => { setMode('login'); setError('') }}
-                      className="text-accent-color hover:opacity-80 underline uppercase tracking-wider"
+                      className="text-[#c9a96e] hover:text-[#d4b87a] underline uppercase tracking-wider"
                     >
                       {t('logIn')}
                     </button>
@@ -281,23 +281,23 @@ export function LoginScreen() {
             {/* OAuth Section */}
             <div className="mt-8">
               <div className="flex items-center gap-3 mb-4">
-                <div className="flex-1 h-px bg-b-default" />
-                <p className="font-mono text-[9px] text-t-muted uppercase tracking-wider">
+                <div className="flex-1 h-px bg-[rgba(201,169,110,0.08)]" />
+                <p className="font-mono text-[9px] text-[#5d4037] uppercase tracking-wider">
                   {t('orConnectWith')}
                 </p>
-                <div className="flex-1 h-px bg-b-default" />
+                <div className="flex-1 h-px bg-[rgba(201,169,110,0.08)]" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => handleOAuth('google')}
-                  className="flex items-center justify-center gap-2 bg-input border border-b-default hover:border-b-focus hover:bg-bg-hover py-3 text-xs text-t-primary font-mono uppercase tracking-wider transition-colors rounded-md"
+                  className="flex items-center justify-center gap-2 bg-[rgba(20,17,15,0.6)] border border-[rgba(201,169,110,0.1)] hover:border-[#c9a96e] hover:bg-[rgba(20,17,15,0.9)] py-3 text-xs text-[#f8f5f2] font-mono uppercase tracking-wider transition-colors"
                 >
                   <GoogleIcon className="w-5 h-5" />
                   {t('google')}
                 </button>
                 <button
                   onClick={() => handleOAuth('discord')}
-                  className="flex items-center justify-center gap-2 bg-input border border-b-default hover:border-b-focus hover:bg-bg-hover py-3 text-xs text-t-primary font-mono uppercase tracking-wider transition-colors rounded-md"
+                  className="flex items-center justify-center gap-2 bg-[rgba(20,17,15,0.6)] border border-[rgba(201,169,110,0.1)] hover:border-[#c9a96e] hover:bg-[rgba(20,17,15,0.9)] py-3 text-xs text-[#f8f5f2] font-mono uppercase tracking-wider transition-colors"
                 >
                   <DiscordIcon className="w-5 h-5 text-[#5865F2]" />
                   {t('discord')}
@@ -310,14 +310,14 @@ export function LoginScreen() {
         {/* Right: Branding */}
         <div className="hidden lg:flex flex-1 items-center justify-center p-8">
           <div className="text-center">
-            <div className="font-serif text-[120px] leading-none tracking-tight select-none opacity-[0.08]" style={{ color: 'var(--accent-color)' }}>
+            <div className="font-serif text-[120px] text-[rgba(201,169,110,0.08)] leading-none tracking-tight select-none">
               L-C
             </div>
             <div className="mt-6">
-              <p className="font-mono text-xs text-t-secondary uppercase tracking-[0.3em]">
+              <p className="font-mono text-xs text-[#8a7c6b] uppercase tracking-[0.3em]">
                 {t('writersWorkspace')}
               </p>
-              <p className="font-mono text-[10px] text-t-muted mt-3 uppercase tracking-wider">
+              <p className="font-mono text-[10px] text-[#5d4037] mt-3 uppercase tracking-wider">
                 {t('aiPoweredPlatform')}
               </p>
             </div>
@@ -327,11 +327,11 @@ export function LoginScreen() {
 
       {/* Footer */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-10 text-center">
-        <p className="font-mono text-[9px] text-accent-color uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-success animate-pulse" style={{ boxShadow: '0 0 6px var(--color-success)' }} />
+        <p className="font-mono text-[9px] text-[#c9a96e] uppercase tracking-wider mb-1 flex items-center justify-center gap-2">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_6px_rgba(34,197,94,0.6)]" />
           {t('systemOnline')}
         </p>
-        <p className="font-mono text-[8px] text-t-muted tracking-wider">
+        <p className="font-mono text-[8px] text-[#5d4037] tracking-wider">
           {t('footerCredit')}
         </p>
       </div>

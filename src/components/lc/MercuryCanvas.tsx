@@ -86,41 +86,10 @@ export function MercuryCanvas() {
     }
     window.addEventListener('mousemove', handleMouse, { passive: true })
 
-    // Read the current theme tokens so the particle palette matches the UI.
-    // We sample these once per frame (cheap) so theme switches are picked up.
-    const getThemeColors = () => {
-      const root = document.documentElement
-      const cs = getComputedStyle(root)
-      const isDark = root.classList.contains('dark') ||
-        root.getAttribute('data-theme') === 'dark'
-      // Fade-cover (the translucent rectangle drawn each frame that creates
-      // the trailing motion-blur effect). Use the page surface color.
-      const bg = cs.getPropertyValue('--bg-app').trim() || (isDark ? '#0c0b0a' : '#fbfaf7')
-      // Particle base hue derived from the accent color so the field always
-      // feels aligned with the brand.
-      const accent = cs.getPropertyValue('--accent-color').trim() || (isDark ? '#8b7cff' : '#7c5cff')
-      return { isDark, bg, accent }
-    }
-
-    const hexToRgb = (hex: string): [number, number, number] => {
-      let h = hex.replace('#', '').trim()
-      if (h.length === 3) {
-        h = h.split('').map((c) => c + c).join('')
-      }
-      const num = parseInt(h, 16)
-      if (Number.isNaN(num) || h.length !== 6) return [200, 195, 190]
-      return [(num >> 16) & 255, (num >> 8) & 255, num & 255]
-    }
-
     let time = 0
     const animate = () => {
       time += 16
-      const { isDark, bg, accent } = getThemeColors()
-      const [br, bg2, bb] = hexToRgb(bg)
-      const [ar, ag, ab] = hexToRgb(accent)
-
-      // Translucent fill creates the motion-blur trail. Match the page bg.
-      ctx.fillStyle = `rgba(${br}, ${bg2}, ${bb}, ${isDark ? 0.18 : 0.10})`
+      ctx.fillStyle = 'rgba(10, 9, 8, 0.15)'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
       const cx = canvas.width / 2
@@ -131,25 +100,19 @@ export function MercuryCanvas() {
         const sx = cx + p.x
         const sy = cy + p.y
         const depth = (p.z + 2) / 4
-        const alpha = (isDark ? 0.22 : 0.30) + depth * 0.40
-        const flicker = 0.82 + Math.sin(time * 0.002 + p.phase) * 0.18
-
-        // Blend the particle color between the accent and a neutral
-        // brightness tier so the field has depth without harshness.
-        const mix = (a: number, b: number, t: number) => Math.round(a + (b - a) * t)
-        const r = mix(ar, isDark ? 180 : 120, depth * 0.45)
-        const g = mix(ag, isDark ? 175 : 115, depth * 0.45)
-        const b = mix(ab, isDark ? 170 : 110, depth * 0.45)
+        const alpha = 0.2 + depth * 0.5
+        const brightness = 80 + Math.floor(depth * 60)
+        const flicker = 0.8 + Math.sin(time * 0.002 + p.phase) * 0.2
 
         ctx.beginPath()
         ctx.arc(sx, sy, p.size * (0.8 + depth * 0.4), 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * flicker})`
+        ctx.fillStyle = `rgba(${brightness}, ${brightness - 10}, ${brightness - 20}, ${alpha * flicker})`
         ctx.fill()
 
         if (p.rand > 0.7) {
           ctx.beginPath()
           ctx.arc(sx, sy - 0.5, p.size * 0.3, 0, Math.PI * 2)
-          ctx.fillStyle = `rgba(${Math.min(255, r + 30)}, ${Math.min(255, g + 25)}, ${Math.min(255, b + 20)}, ${alpha * 0.35})`
+          ctx.fillStyle = `rgba(${brightness + 40}, ${brightness + 20}, ${brightness}, ${alpha * 0.3})`
           ctx.fill()
         }
       }

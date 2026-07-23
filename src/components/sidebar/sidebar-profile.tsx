@@ -54,26 +54,26 @@ export function SidebarProfile({ onLogout, user }: SidebarProfileProps) {
         {/* Profile pill (opens settings) */}
         <button
           onClick={() => setShowSettings(true)}
-          className="flex-1 flex items-center gap-2.5 px-1.5 py-1.5 rounded-md hover:bg-bg-hover transition-colors min-w-0"
+          className="flex-1 flex items-center gap-2.5 px-1.5 py-1.5 rounded-md hover:bg-zinc-800/80 transition-colors min-w-0"
         >
           {/* Avatar */}
-          <div className="w-7 h-7 rounded-full bg-elevated flex items-center justify-center shrink-0 border border-b-default">
-            <span className="text-[11px] font-serif text-accent-color">{initial}</span>
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center shrink-0 border border-zinc-600">
+            <span className="text-[11px] font-serif text-red-500">{initial}</span>
           </div>
           {/* Name */}
           <div className="flex-1 min-w-0 text-left">
-            <p className="text-[12px] text-t-primary truncate font-medium leading-tight">
+            <p className="text-[12px] text-zinc-200 truncate font-medium leading-tight">
               {effectiveAccount.displayName}
             </p>
           </div>
           {/* Settings icon */}
-          <SettingsIcon className="w-3.5 h-3.5 text-t-muted group-hover:text-t-secondary transition shrink-0" />
+          <SettingsIcon className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-400 transition shrink-0" />
         </button>
 
         {/* Logout icon */}
         <button
           onClick={() => setShowLogoutOverlay(true)}
-          className="p-1.5 rounded-md text-t-muted hover:text-danger hover:bg-danger-soft transition-colors shrink-0"
+          className="p-1.5 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
           title="Log out"
           aria-label="Log out"
         >
@@ -97,7 +97,7 @@ export function SidebarProfile({ onLogout, user }: SidebarProfileProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--backdrop-overlay)] backdrop-blur-md p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4"
             onClick={() => setShowLogoutOverlay(false)}
           >
             <motion.div
@@ -105,27 +105,27 @@ export function SidebarProfile({ onLogout, user }: SidebarProfileProps) {
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 10 }}
               transition={{ duration: 0.18 }}
-              className="bg-dialog border border-b-subtle rounded-xl p-6 shadow-pop w-full max-w-sm"
+              className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 shadow-2xl w-full max-w-sm"
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 className="text-t-primary font-bold text-lg mb-1">
+              <h2 className="text-zinc-100 font-bold text-lg mb-1">
                 Are you sure you want to log out?
               </h2>
-              <p className="text-sm text-t-secondary mb-5">
+              <p className="text-sm text-zinc-400 mb-5">
                 You will need to sign in again to continue writing.
               </p>
 
               {/* User preview */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-elevated border border-b-subtle mb-5">
-                <div className="w-10 h-10 rounded-full bg-elevated flex items-center justify-center border border-b-default shrink-0">
-                  <span className="text-sm font-serif text-accent-color">{initial}</span>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-800 border border-zinc-700 mb-5">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center border border-zinc-600 shrink-0">
+                  <span className="text-sm font-serif text-red-500">{initial}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-t-primary truncate">
+                  <p className="text-sm font-semibold text-white truncate">
                     {effectiveAccount.displayName}
                   </p>
                   {effectiveAccount.email && (
-                    <p className="text-[11px] text-t-secondary truncate">{effectiveAccount.email}</p>
+                    <p className="text-[11px] text-zinc-400 truncate">{effectiveAccount.email}</p>
                   )}
                 </div>
               </div>
@@ -136,13 +136,13 @@ export function SidebarProfile({ onLogout, user }: SidebarProfileProps) {
                     setShowLogoutOverlay(false)
                     onLogout()
                   }}
-                  className="btn-accent w-full py-2.5 text-sm font-bold rounded-lg"
+                  className="w-full bg-white text-black hover:bg-zinc-200 py-2.5 text-sm font-bold rounded-lg transition"
                 >
                   Log out
                 </button>
                 <button
                   onClick={() => setShowLogoutOverlay(false)}
-                  className="w-full bg-transparent border border-b-default text-t-secondary hover:bg-bg-hover hover:text-t-primary py-2.5 text-sm font-medium rounded-lg transition"
+                  className="w-full bg-transparent border border-zinc-600 text-zinc-300 hover:bg-zinc-800 py-2.5 text-sm font-medium rounded-lg transition"
                 >
                   Cancel
                 </button>
