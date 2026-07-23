@@ -1,211 +1,615 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* ─────────────────────────────────────────────────────────────
-   THEME ARCHITECTURE (Tailwind v4)
-   ─────────────────────────────────────────────────────────────
-   - `:root` defines LIGHT theme variables (default).
-   - `.dark` (added to <html>) overrides with dark theme variables.
-   - `.light` (added to <html>) explicitly re-applies light values,
-     useful when the user explicitly picks Light mode while their
-     OS prefers dark.
-   - `--accent-color` is set dynamically by JS via
-     document.documentElement.style.setProperty('--accent-color', '#xxxxxx')
-     when the user picks an accent color in Settings.
-   - The @theme inline block maps Tailwind utility color names
-     (background, foreground, primary, secondary, muted, accent, border,
-     input, ring, etc.) to these CSS variables so utilities like
-     bg-background, text-foreground, bg-primary, text-accent-foreground
-     all respond to theme switches automatically.
-   ───────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════
+   LC NOVEL · PREMIUM DESIGN TOKEN ARCHITECTURE
+   ───────────────────────────────────────────────────────────────────────────
+   Calm, premium, modern — comparable to ChatGPT, Linear, Notion, Figma,
+   Arc Browser, and Vercel.
+
+   Principles
+   1. Light and Dark are INDEPENDENT palettes. Dark is never derived by
+      inverting Light. Each is hand-tuned for its environment.
+   2. No pure black (#000) and no pure white (#fff). Surfaces use warm
+      neutral grays so the interface feels calm and paper-like.
+   3. Visual hierarchy is created through ELEVATION — each layer has a
+      subtly different surface color. Adjacent containers never share
+      an identical background.
+   4. Borders are low-opacity, not heavy outlines. Shadows are minimal
+      in dark mode (elevation through surface color instead).
+   5. Every interactive element defines: default / hover / active /
+      pressed / focused / selected / disabled.
+   6. Transitions are 120–180ms with ease-out timing.
+   7. Components consume TOKENS, never hardcoded colors.
+
+   Theme switching is done by swapping tokens. Two selector strategies
+   coexist for backward compatibility with existing markup:
+   - `[data-theme="light"]` / `[data-theme="dark"]` (canonical)
+   - `.light` / `.dark` on <html> (legacy, supported)
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 @custom-variant dark (&:is(.dark *));
 
-/* ─── LIGHT THEME (default — applies when no .dark class is present) ─── */
+/* ─────────────────────────────────────────────────────────────────────────
+   LIGHT THEME — warm paper, layered surfaces, soft contrast
+   ───────────────────────────────────────────────────────────────────────── */
 :root,
+[data-theme="light"],
 .light {
-  --radius: 0.25rem;
-
-  /* Core spec variables (per task spec) */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f4f4f5;
-  --text-primary: #000000;
-  --text-secondary: #525252;
-  --border-color: #e4e4e7;
-  --accent-color: #8b5cf6; /* Default Shadow Purple */
-
-  /* Extended semantic palette (mapped to Tailwind utilities) */
-  --background: #faf8f3;
-  --foreground: #1a1612;
-  --card: #ffffff;
-  --card-foreground: #1a1612;
-  --popover: #ffffff;
-  --popover-foreground: #1a1612;
-  --primary: #8b6914;
-  --primary-foreground: #faf8f3;
-  --secondary: #f0ece3;
-  --secondary-foreground: #1a1612;
-  --muted: #f0ece3;
-  --muted-foreground: #6b5d4f;
-  --accent: #e8dcc4;
-  --accent-foreground: #1a1612;
-  --destructive: #b91c1c;
-  --border: rgba(26, 22, 18, 0.12);
-  --input: rgba(26, 22, 18, 0.18);
-  --ring: #8b5cf6;
-  --chart-1: #8b6914;
-  --chart-2: #6b5d4f;
-  --chart-3: #a89478;
-  --chart-4: #b89968;
-  --chart-5: #4a3c2e;
-  --sidebar: #f5f1e8;
-  --sidebar-foreground: #1a1612;
-  --sidebar-primary: #8b5cf6;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8dcc4;
-  --sidebar-accent-foreground: #1a1612;
-  --sidebar-border: rgba(26, 22, 18, 0.08);
-  --sidebar-ring: #8b5cf6;
-}
-
-/* ─── DARK THEME (applied when .dark class is on <html>) ─── */
-.dark {
-  --radius: 0.25rem;
-
-  /* Core spec variables (per task spec) */
-  --bg-primary: #09090b;
-  --bg-secondary: #18181b;
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  --border-color: #27272a;
-  --accent-color: #8b5cf6; /* Default Shadow Purple */
-
-  /* Extended semantic palette */
-  --background: #0a0908;
-  --foreground: #f8f5f2;
-  --card: #14110f;
-  --card-foreground: #f8f5f2;
-  --popover: #14110f;
-  --popover-foreground: #f8f5f2;
-  --primary: #c9a96e;
-  --primary-foreground: #0a0908;
-  --secondary: #1a1612;
-  --secondary-foreground: #f8f5f2;
-  --muted: #1a1612;
-  --muted-foreground: #8a7c6b;
-  --accent: #3e2723;
-  --accent-foreground: #f8f5f2;
-  --destructive: #dc2626;
-  --border: rgba(201, 169, 110, 0.12);
-  --input: rgba(201, 169, 110, 0.18);
-  --ring: #8b5cf6;
-  --chart-1: #c9a96e;
-  --chart-2: #8a7c6b;
-  --chart-3: #3e2723;
-  --chart-4: #d4b87a;
-  --chart-5: #5d4037;
-  --sidebar: #14110f;
-  --sidebar-foreground: #f8f5f2;
-  --sidebar-primary: #8b5cf6;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1a1612;
-  --sidebar-accent-foreground: #f8f5f2;
-  --sidebar-border: rgba(201, 169, 110, 0.08);
-  --sidebar-ring: #8b5cf6;
-}
-
-/* ─── Tailwind v4 theme mapping ───
-   Maps utility class names (e.g. bg-background, text-primary) to CSS
-   variables so utilities auto-respond to theme switches. */
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-bg-primary: var(--bg-primary);
-  --color-bg-secondary: var(--bg-secondary);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-border-color: var(--border-color);
-  --color-accent-color: var(--accent-color);
-
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-display: var(--font-display);
-
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-
+  /* Base radii */
+  --radius: 0.5rem;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  /* ── Application surfaces (elevation hierarchy, low → high) ── */
+  --bg-app: #fbfaf7;            /* page root — warm off-white */
+  --bg-canvas: #ffffff;          /* main workspace */
+  --bg-sidebar: #f4f2ec;         /* navigation column */
+  --bg-navigation: #f7f5ef;      /* in-page nav strips */
+  --bg-floating: #ffffff;        /* floating panels */
+  --bg-card: #ffffff;            /* cards */
+  --bg-elevated: #ffffff;        /* elevated surfaces */
+  --bg-dropdown: #ffffff;        /* dropdown menus */
+  --bg-dialog: #ffffff;          /* modal dialogs */
+  --bg-tooltip: #1f1d1a;         /* dark tooltip for contrast */
+  --bg-input: #ffffff;           /* form inputs */
+  --bg-button: #ffffff;          /* default button surface */
+  --bg-context-menu: #ffffff;    /* right-click menus */
+  --bg-hover: rgba(28, 25, 23, 0.04);
+  --bg-pressed: rgba(28, 25, 23, 0.08);
+  --bg-selected: rgba(139, 92, 246, 0.08);
+  --bg-focus: rgba(139, 92, 246, 0.06);
+
+  /* ── Text tiers (weight differentiation, not just color) ── */
+  --text-primary: #1c1917;       /* stone-900 — primary copy */
+  --text-secondary: #57534e;     /* stone-600 — secondary copy */
+  --text-muted: #8a8580;         /* muted captions */
+  --text-placeholder: #a8a29e;   /* placeholder text */
+  --text-on-accent: #ffffff;     /* text on accent fills */
+  --text-on-tooltip: #fafaf9;    /* text inside tooltips */
+  --text-disabled: #c4bfb9;
+
+  /* ── Borders & dividers ── */
+  --border-subtle: rgba(28, 25, 23, 0.06);
+  --border-default: rgba(28, 25, 23, 0.10);
+  --border-strong: rgba(28, 25, 23, 0.16);
+  --border-focus: rgba(139, 92, 246, 0.55);
+  --border-input: rgba(28, 25, 23, 0.14);
+  --divider: rgba(28, 25, 23, 0.07);
+
+  /* ── Accent & semantic colors ── */
+  --accent-color: #7c5cff;       /* primary brand accent (dynamic) */
+  --accent-hover: #6d4df5;
+  --accent-pressed: #5d3ee6;
+  --accent-soft: rgba(124, 92, 255, 0.10);
+  --accent-soft-hover: rgba(124, 92, 255, 0.16);
+
+  --color-danger: #d93025;
+  --color-danger-hover: #c22b1f;
+  --color-danger-soft: rgba(217, 48, 37, 0.10);
+  --color-warning: #c47a14;
+  --color-warning-soft: rgba(196, 122, 20, 0.12);
+  --color-success: #2e7d4f;
+  --color-success-soft: rgba(46, 125, 79, 0.12);
+  --color-info: #2563eb;
+  --color-info-soft: rgba(37, 99, 235, 0.10);
+
+  /* ── Focus ring ── */
+  --ring-focus: rgba(124, 92, 255, 0.45);
+  --ring-focus-strong: rgba(124, 92, 255, 0.7);
+
+  /* ── Shadows (soft, warm) ── */
+  --shadow-xs: 0 1px 2px rgba(28, 25, 23, 0.04);
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.05), 0 1px 3px rgba(28, 25, 23, 0.04);
+  --shadow-md: 0 4px 12px rgba(28, 25, 23, 0.06), 0 2px 4px rgba(28, 25, 23, 0.04);
+  --shadow-lg: 0 8px 24px rgba(28, 25, 23, 0.08), 0 4px 8px rgba(28, 25, 23, 0.05);
+  --shadow-xl: 0 16px 40px rgba(28, 25, 23, 0.10), 0 8px 16px rgba(28, 25, 23, 0.06);
+  --shadow-pop: 0 8px 32px rgba(28, 25, 23, 0.12), 0 2px 8px rgba(28, 25, 23, 0.06);
+
+  /* ── Sidebar-specific (slightly warmer, distinct from main canvas) ── */
+  --sidebar-bg: #f4f2ec;
+  --sidebar-surface: #ffffff;
+  --sidebar-hover: rgba(28, 25, 23, 0.05);
+  --sidebar-active: rgba(124, 92, 255, 0.10);
+  --sidebar-text: #1c1917;
+  --sidebar-text-muted: #6b6660;
+  --sidebar-border: rgba(28, 25, 23, 0.08);
+  --sidebar-divider: rgba(28, 25, 23, 0.06);
+
+  /* ── Shadcn/Radix semantic aliases (required by existing components) ── */
+  --background: var(--bg-app);
+  --foreground: var(--text-primary);
+  --card: var(--bg-card);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-dropdown);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent-color);
+  --primary-foreground: var(--text-on-accent);
+  --secondary: #f1efe8;
+  --secondary-foreground: var(--text-primary);
+  --muted: #f1efe8;
+  --muted-foreground: var(--text-secondary);
+  --accent: #f1efe8;
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--color-danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--border-default);
+  --input: var(--border-input);
+  --ring: var(--accent-color);
+
+  /* ── Legacy compat tokens used by existing components ── */
+  --bg-primary: var(--bg-app);
+  --bg-secondary: var(--bg-sidebar);
+  --border-color: var(--border-default);
+  --text-secondary-2: var(--text-secondary);
+
+  /* ── Charts ── */
+  --chart-1: #7c5cff;
+  --chart-2: #c47a14;
+  --chart-3: #2e7d4f;
+  --chart-4: #2563eb;
+  --chart-5: #d93025;
+
+  /* ── Sidebar semantic (shadcn sidebar.tsx) ── */
+  --sidebar: var(--sidebar-bg);
+  --sidebar-foreground: var(--sidebar-text);
+  --sidebar-primary: var(--accent-color);
+  --sidebar-primary-foreground: var(--text-on-accent);
+  --sidebar-accent: var(--sidebar-active);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--sidebar-border);
+  --sidebar-ring: var(--accent-color);
+
+  /* ── Misc ── */
+  --scrollbar-thumb: rgba(28, 25, 23, 0.18);
+  --scrollbar-thumb-hover: rgba(28, 25, 23, 0.32);
+  --backdrop-overlay: rgba(28, 25, 23, 0.45);
+
+  color-scheme: light;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   DARK THEME — deep neutrals, layered elevation, minimal shadows
+   ───────────────────────────────────────────────────────────────────────── */
+[data-theme="dark"],
+.dark {
+  --radius: 0.5rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  /* ── Application surfaces — elevation via subtle lightness steps ── */
+  --bg-app: #0c0b0a;             /* page root — warm near-black */
+  --bg-canvas: #131210;          /* main workspace */
+  --bg-sidebar: #0f0e0d;         /* navigation column */
+  --bg-navigation: #161514;      /* in-page nav strips */
+  --bg-floating: #1a1917;        /* floating panels */
+  --bg-card: #1a1917;            /* cards */
+  --bg-elevated: #1f1e1c;        /* elevated surfaces */
+  --bg-dropdown: #1f1e1c;        /* dropdown menus */
+  --bg-dialog: #1c1b19;          /* modal dialogs */
+  --bg-tooltip: #f5f3ee;         /* light tooltip for contrast */
+  --bg-input: #161514;           /* form inputs */
+  --bg-button: #1f1e1c;          /* default button surface */
+  --bg-context-menu: #1f1e1c;    /* right-click menus */
+  --bg-hover: rgba(245, 243, 238, 0.04);
+  --bg-pressed: rgba(245, 243, 238, 0.08);
+  --bg-selected: rgba(124, 92, 255, 0.16);
+  --bg-focus: rgba(124, 92, 255, 0.10);
+
+  /* ── Text tiers ── */
+  --text-primary: #ecebe7;       /* warm near-white */
+  --text-secondary: #a8a39d;
+  --text-muted: #76716b;
+  --text-placeholder: #5d5953;
+  --text-on-accent: #ffffff;
+  --text-on-tooltip: #1c1917;
+  --text-disabled: #4a463f;
+
+  /* ── Borders & dividers (low-opacity, never harsh) ── */
+  --border-subtle: rgba(245, 243, 238, 0.06);
+  --border-default: rgba(245, 243, 238, 0.09);
+  --border-strong: rgba(245, 243, 238, 0.16);
+  --border-focus: rgba(124, 92, 255, 0.65);
+  --border-input: rgba(245, 243, 238, 0.13);
+  --divider: rgba(245, 243, 238, 0.06);
+
+  /* ── Accent & semantic colors ── */
+  --accent-color: #8b7cff;       /* slightly brighter for dark bg */
+  --accent-hover: #9d8eff;
+  --accent-pressed: #7c6df5;
+  --accent-soft: rgba(139, 124, 255, 0.16);
+  --accent-soft-hover: rgba(139, 124, 255, 0.24);
+
+  --color-danger: #f06356;
+  --color-danger-hover: #f37d70;
+  --color-danger-soft: rgba(240, 99, 86, 0.14);
+  --color-warning: #e0a543;
+  --color-warning-soft: rgba(224, 165, 67, 0.14);
+  --color-success: #4db978;
+  --color-success-soft: rgba(77, 185, 120, 0.14);
+  --color-info: #5a92f5;
+  --color-info-soft: rgba(90, 146, 245, 0.14);
+
+  /* ── Focus ring ── */
+  --ring-focus: rgba(139, 124, 255, 0.55);
+  --ring-focus-strong: rgba(139, 124, 255, 0.8);
+
+  /* ── Shadows (very subtle in dark — elevation via surface color) ── */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30), 0 1px 3px rgba(0, 0, 0, 0.20);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.22);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45), 0 4px 8px rgba(0, 0, 0, 0.28);
+  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.55), 0 8px 16px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 8px 32px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.30);
+
+  /* ── Sidebar-specific (slightly darker than main canvas) ── */
+  --sidebar-bg: #0f0e0d;
+  --sidebar-surface: #1a1917;
+  --sidebar-hover: rgba(245, 243, 238, 0.04);
+  --sidebar-active: rgba(139, 124, 255, 0.18);
+  --sidebar-text: #ecebe7;
+  --sidebar-text-muted: #8a857f;
+  --sidebar-border: rgba(245, 243, 238, 0.06);
+  --sidebar-divider: rgba(245, 243, 238, 0.05);
+
+  /* ── Shadcn/Radix semantic aliases ── */
+  --background: var(--bg-app);
+  --foreground: var(--text-primary);
+  --card: var(--bg-card);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-dropdown);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent-color);
+  --primary-foreground: var(--text-on-accent);
+  --secondary: #1f1e1c;
+  --secondary-foreground: var(--text-primary);
+  --muted: #1f1e1c;
+  --muted-foreground: var(--text-secondary);
+  --accent: #2a2825;
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--color-danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--border-default);
+  --input: var(--border-input);
+  --ring: var(--accent-color);
+
+  /* Legacy */
+  --bg-primary: var(--bg-app);
+  --bg-secondary: var(--bg-sidebar);
+  --border-color: var(--border-default);
+  --text-secondary-2: var(--text-secondary);
+
+  /* Charts */
+  --chart-1: #8b7cff;
+  --chart-2: #e0a543;
+  --chart-3: #4db978;
+  --chart-4: #5a92f5;
+  --chart-5: #f06356;
+
+  /* Sidebar semantic */
+  --sidebar: var(--sidebar-bg);
+  --sidebar-foreground: var(--sidebar-text);
+  --sidebar-primary: var(--accent-color);
+  --sidebar-primary-foreground: var(--text-on-accent);
+  --sidebar-accent: var(--sidebar-active);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--sidebar-border);
+  --sidebar-ring: var(--accent-color);
+
+  /* Misc */
+  --scrollbar-thumb: rgba(245, 243, 238, 0.14);
+  --scrollbar-thumb-hover: rgba(245, 243, 238, 0.24);
+  --backdrop-overlay: rgba(0, 0, 0, 0.65);
+
+  color-scheme: dark;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TAILWIND v4 THEME MAPPING
+   Maps Tailwind utility color names to design tokens so utilities like
+   bg-background, text-foreground, bg-primary, etc. respond to theme switches.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@theme inline {
+  /* Core surfaces */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  /* Semantic */
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  /* Lines */
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Legacy utility colors (kept for existing markup) */
+  --color-bg-primary: var(--bg-app);
+  --color-bg-secondary: var(--bg-sidebar);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border-color: var(--border-default);
+  --color-accent-color: var(--accent-color);
+
+  /* Premium interaction states (consumed by Button, etc.) */
+  --color-bg-app: var(--bg-app);
+  --color-bg-canvas: var(--bg-canvas);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-bg-navigation: var(--bg-navigation);
+  --color-bg-card: var(--bg-card);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-floating: var(--bg-floating);
+  --color-bg-dropdown: var(--bg-dropdown);
+  --color-bg-dialog: var(--bg-dialog);
+  --color-bg-tooltip: var(--bg-tooltip);
+  --color-bg-input: var(--bg-input);
+  --color-bg-button: var(--bg-button);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-pressed: var(--bg-pressed);
+  --color-bg-selected: var(--bg-selected);
+  --color-bg-focus: var(--bg-focus);
+
+  /* Text tiers as tailwind utilities */
+  --color-t-primary: var(--text-primary);
+  --color-t-secondary: var(--text-secondary);
+  --color-t-muted: var(--text-muted);
+  --color-t-placeholder: var(--text-placeholder);
+  --color-t-disabled: var(--text-disabled);
+  --color-t-on-accent: var(--text-on-accent);
+  --color-t-on-tooltip: var(--text-on-tooltip);
+
+  /* Border tokens as tailwind utilities */
+  --color-b-subtle: var(--border-subtle);
+  --color-b-default: var(--border-default);
+  --color-b-strong: var(--border-strong);
+  --color-b-focus: var(--border-focus);
+  --color-divider: var(--divider);
+
+  /* Semantic color tokens as tailwind utilities */
+  --color-success: var(--color-success);
+  --color-success-soft: var(--color-success-soft);
+  --color-warning: var(--color-warning);
+  --color-warning-soft: var(--color-warning-soft);
+  --color-info: var(--color-info);
+  --color-info-soft: var(--color-info-soft);
+  --color-danger: var(--color-danger);
+  --color-danger-soft: var(--color-danger-soft);
+
+  /* Accent variants */
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-pressed: var(--accent-pressed);
+
+  /* Charts */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Fonts */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display);
+
+  /* Radii */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BASE LAYER — typography, body, headings, focus rings, scrollbars
+   ═══════════════════════════════════════════════════════════════════════════ */
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  *,
+  *::before,
+  *::after {
+    border-color: var(--border-default);
   }
-  html, body {
-    background: var(--background);
-    color: var(--foreground);
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
+
   body {
-    font-family: var(--font-sans), system-ui, sans-serif;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    font-feature-settings: "cv11", "ss01", "ss03";
+    line-height: 1.55;
+    transition: background-color 160ms ease-out, color 160ms ease-out;
   }
+
   h1, h2, h3, h4, h5, h6, .font-display {
     font-family: var(--font-display), Georgia, "Times New Roman", serif;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  /* Caption / metadata text */
+  .text-caption {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  .text-metadata {
+    font-size: 0.6875rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  /* Accessible focus ring — always visible */
+  :focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--bg-app), 0 0 0 4px var(--ring-focus);
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--text-primary);
+  }
+
+  /* Custom scrollbar */
+  .lc-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .lc-scroll::-webkit-scrollbar-track { background: transparent; }
+  .lc-scroll::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .lc-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+  .lc-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  /* Native form controls respect theme */
+  input, textarea, select {
+    color: var(--text-primary);
+  }
+  input::placeholder, textarea::placeholder {
+    color: var(--text-placeholder);
+  }
+  select option {
+    background-color: var(--bg-dropdown);
+    color: var(--text-primary);
   }
 }
 
-.lc-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-.lc-scroll::-webkit-scrollbar-track { background: transparent; }
-.lc-scroll::-webkit-scrollbar-thumb {
-  background: rgba(201, 169, 110, 0.15);
-  border-radius: 3px;
+/* ═══════════════════════════════════════════════════════════════════════════
+   ELEVATION UTILITY CLASSES
+   Use these to apply a layered surface + matching shadow.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.surface-base    { background-color: var(--bg-app); }
+.surface-canvas  { background-color: var(--bg-canvas); }
+.surface-sidebar { background-color: var(--bg-sidebar); }
+.surface-nav     { background-color: var(--bg-navigation); }
+.surface-card    { background-color: var(--bg-card); }
+.surface-elevated { background-color: var(--bg-elevated); }
+.surface-floating { background-color: var(--bg-floating); }
+.surface-dropdown { background-color: var(--bg-dropdown); }
+.surface-dialog   { background-color: var(--bg-dialog); }
+.surface-tooltip  { background-color: var(--bg-tooltip); color: var(--text-on-tooltip); }
+.surface-input    { background-color: var(--bg-input); }
+.surface-button   { background-color: var(--bg-button); }
+
+.elevate-1 { box-shadow: var(--shadow-xs); }
+.elevate-2 { box-shadow: var(--shadow-sm); }
+.elevate-3 { box-shadow: var(--shadow-md); }
+.elevate-4 { box-shadow: var(--shadow-lg); }
+.elevate-5 { box-shadow: var(--shadow-xl); }
+.elevate-pop { box-shadow: var(--shadow-pop); }
+
+/* Border utility classes that map to tokens */
+.b-subtle { border-color: var(--border-subtle) !important; }
+.b-default { border-color: var(--border-default) !important; }
+.b-strong { border-color: var(--border-strong) !important; }
+.b-focus { border-color: var(--border-focus) !important; }
+.b-divider { border-color: var(--divider) !important; }
+
+/* Text utility classes that map to tokens */
+.t-primary { color: var(--text-primary) !important; }
+.t-secondary { color: var(--text-secondary) !important; }
+.t-muted { color: var(--text-muted) !important; }
+.t-placeholder { color: var(--text-placeholder) !important; }
+.t-disabled { color: var(--text-disabled) !important; }
+.t-on-accent { color: var(--text-on-accent) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ACCENT COLOR ENGINE
+   ───────────────────────────────────────────────────────────────────────────
+   `--accent-color` is set dynamically by JS (see layout.tsx bootstrap).
+   Elements using .accent-bg / .accent-text / .accent-border / .accent-ring
+   instantly recolor when the user changes the accent in Settings.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.accent-bg {
+  background-color: var(--accent-color) !important;
+  color: var(--text-on-accent);
 }
-.lc-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(201, 169, 110, 0.3);
+.accent-text { color: var(--accent-color) !important; }
+.accent-border { border-color: var(--accent-color) !important; }
+.accent-ring { box-shadow: 0 0 0 2px var(--accent-color) !important; }
+.accent-soft-bg { background-color: var(--accent-soft) !important; }
+
+.btn-accent {
+  background-color: var(--accent-color);
+  color: var(--text-on-accent);
+  transition: background-color 150ms ease-out, transform 150ms ease-out, filter 150ms ease-out;
+}
+.btn-accent:hover {
+  background-color: var(--accent-hover);
+  filter: brightness(1.04);
+}
+.btn-accent:active,
+.btn-accent.pressed {
+  background-color: var(--accent-pressed);
+  transform: translateY(0.5px);
+}
+.btn-accent:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANIMATIONS & MICRO-INTERACTIONS
+   All transitions 120–180ms with ease-out for that "premium app" feel.
+   ═══════════════════════════════════════════════════════════════════════════ */
 .status-online {
   animation: lc-pulse 2.4s ease-in-out infinite;
 }
 @keyframes lc-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6); }
-  50%      { opacity: 0.7; box-shadow: 0 0 0 4px rgba(34, 197, 94, 0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(77, 185, 120, 0.55); }
+  50%      { opacity: 0.75; box-shadow: 0 0 0 4px rgba(77, 185, 120, 0); }
 }
 
 .lc-fade-in {
-  animation: lc-fade 0.3s ease-out;
+  animation: lc-fade 220ms ease-out;
 }
 @keyframes lc-fade {
   from { opacity: 0; transform: translateY(4px); }
@@ -213,39 +617,165 @@
 }
 
 .lc-ghost {
-  color: #5d4037;
+  color: var(--text-muted);
   font-style: italic;
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   LIGHT MODE UTILITY OVERRIDES
-   ───────────────────────────────────────────────────────────────
-   The app's existing components use Tailwind zinc-* utilities and a
-   few hardcoded hex colors directly (bg-zinc-950, text-zinc-200,
-   border-zinc-800, bg-[#0a0908], etc.) instead of the CSS variables.
-   When the user selects "Light" mode, the .light class is on <html>
-   and .dark is removed. These rules override the dark utility classes
-   with light-mode equivalents so the entire app visibly flips to light.
+/* Universal transition class — applied to interactive primitives */
+.transition-premium {
+  transition-property: background-color, border-color, color, fill, stroke,
+    box-shadow, transform, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1); /* ease-out */
+}
 
-   We use !important defensively because Tailwind v4 generates
-   utilities at high specificity.
-   ═══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   LEGACY TAILWIND UTILITY OVERRIDES
+   ───────────────────────────────────────────────────────────────────────────
+   The existing codebase uses Tailwind zinc-* utilities and a handful of
+   hardcoded hex values directly in JSX. Rather than rewriting every
+   className (which would risk touching logic), we remap those utilities
+   to the new design tokens via theme-aware CSS overrides. This preserves
+   100% of existing structure while making the entire app consume the
+   new token system.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ─── Backgrounds ─── */
+/* ─── Dark-mode zinc-* → tokens (the app's default mode) ─── */
+.dark .bg-zinc-950,
+.dark .bg-zinc-950\/50,
+.dark .bg-zinc-950\/60,
+.dark .bg-zinc-950\/80,
+.dark .bg-zinc-950\/90,
+.dark .bg-zinc-950\/95 { background-color: var(--bg-app) !important; }
+
+.dark .bg-zinc-900,
+.dark .bg-zinc-900\/50,
+.dark .bg-zinc-900\/60,
+.dark .bg-zinc-900\/80,
+.dark .bg-zinc-900\/90,
+.dark .bg-zinc-900\/95 { background-color: var(--bg-canvas) !important; }
+
+.dark .bg-zinc-800,
+.dark .bg-zinc-800\/30,
+.dark .bg-zinc-800\/40,
+.dark .bg-zinc-800\/50,
+.dark .bg-zinc-800\/60,
+.dark .bg-zinc-800\/80,
+.dark .bg-zinc-800\/90 { background-color: var(--bg-elevated) !important; }
+
+.dark .bg-zinc-700,
+.dark .bg-zinc-700\/30,
+.dark .bg-zinc-700\/50 { background-color: var(--bg-navigation) !important; }
+
+/* Solid black backgrounds (page roots, sidebars) — keep modal backdrops intact */
+.dark .bg-black:not(.bg-black\/70):not(.bg-black\/80):not(.bg-black\/90):not(.bg-black\/60):not(.bg-black\/50):not(.bg-black\/40) {
+  background-color: var(--bg-app) !important;
+}
+.dark .bg-black\/40 { background-color: var(--backdrop-overlay) !important; }
+.dark .bg-black\/30 { background-color: rgba(0, 0, 0, 0.30) !important; }
+.dark .bg-black\/20 { background-color: rgba(0, 0, 0, 0.20) !important; }
+.dark .bg-black\/10 { background-color: rgba(0, 0, 0, 0.10) !important; }
+
+/* Hardcoded hex backgrounds used in the codebase */
+.dark .bg-\[\#0a0908\] { background-color: var(--bg-app) !important; }
+.dark .bg-\[\#14110f\] { background-color: var(--bg-canvas) !important; }
+.dark .bg-\[\#1a1612\] { background-color: var(--bg-elevated) !important; }
+.dark .bg-\[\#0d0a07\] { background-color: var(--bg-app) !important; }
+.dark .bg-\[\#160d22\] { background-color: var(--bg-canvas) !important; }
+.dark .bg-\[\#2d1a3e\] { background-color: var(--bg-elevated) !important; }
+
+/* Gradient backgrounds — neutralize to token surfaces so palette stays calm */
+.dark .bg-gradient-to-br,
+.dark .bg-gradient-to-tr,
+.dark .bg-gradient-to-b,
+.dark .bg-gradient-to-t { background-image: none !important; }
+
+/* ─── Dark text colors ─── */
+.dark .text-zinc-100,
+.dark .text-zinc-50 { color: var(--text-primary) !important; }
+.dark .text-zinc-200 { color: var(--text-primary) !important; opacity: 0.95; }
+.dark .text-zinc-300 { color: var(--text-secondary) !important; }
+.dark .text-zinc-400 { color: var(--text-secondary) !important; opacity: 0.92; }
+.dark .text-zinc-500 { color: var(--text-muted) !important; }
+.dark .text-zinc-600 { color: var(--text-muted) !important; opacity: 0.85; }
+.dark .text-zinc-700 { color: var(--text-muted) !important; opacity: 0.7; }
+.dark .text-zinc-800 { color: var(--text-muted) !important; opacity: 0.55; }
+.dark .text-zinc-900 { color: var(--text-muted) !important; opacity: 0.45; }
+
+/* Hardcoded hex text colors */
+.dark .text-\[\#f8f5f2\] { color: var(--text-primary) !important; }
+.dark .text-\[\#c9a96e\] { color: var(--accent-color) !important; }
+.dark .text-\[\#8a7c6b\] { color: var(--text-secondary) !important; }
+.dark .text-\[\#5d4037\] { color: var(--text-muted) !important; }
+.dark .text-\[\#1a1a1a\] { color: var(--text-primary) !important; opacity: 0.85; }
+
+.dark .text-black { color: var(--text-primary) !important; }
+
+/* ─── Dark borders ─── */
+.dark .border-zinc-800,
+.dark .border-zinc-800\/50,
+.dark .border-zinc-800\/30 { border-color: var(--border-default) !important; }
+.dark .border-zinc-700 { border-color: var(--border-strong) !important; }
+.dark .border-zinc-900 { border-color: var(--border-subtle) !important; }
+.dark .border-zinc-600 { border-color: var(--border-strong) !important; }
+.dark .border-zinc-700\/30 { border-color: var(--border-default) !important; }
+.dark .border-black,
+.dark .border-black\/10 { border-color: var(--border-default) !important; }
+
+.dark .border-\[\#1a1a1a\],
+.dark .border-\[\#1a1a1a\]\/50 { border-color: var(--border-default) !important; }
+.dark .border-\[\#14110f\] { border-color: var(--border-subtle) !important; }
+.dark .border-\[\#2d1a3e\] { border-color: var(--accent-color) !important; opacity: 0.4; }
+
+.dark .border-t-zinc-900 { border-top-color: var(--border-subtle) !important; }
+.dark .border-t-zinc-800 { border-top-color: var(--border-default) !important; }
+.dark .border-b-zinc-800 { border-bottom-color: var(--border-default) !important; }
+.dark .border-r-zinc-900 { border-right-color: var(--border-subtle) !important; }
+.dark .border-l-zinc-900 { border-left-color: var(--border-subtle) !important; }
+
+/* ─── Dark hover states ─── */
+.dark .hover\:bg-zinc-800:hover { background-color: var(--bg-hover) !important; }
+.dark .hover\:bg-zinc-800\/50:hover { background-color: var(--bg-hover) !important; }
+.dark .hover\:bg-zinc-800\/30:hover { background-color: var(--bg-hover) !important; }
+.dark .hover\:bg-zinc-700:hover { background-color: var(--bg-pressed) !important; }
+.dark .hover\:bg-zinc-900:hover { background-color: var(--bg-hover) !important; }
+.dark .hover\:bg-zinc-950:hover { background-color: var(--bg-hover) !important; }
+.dark .hover\:bg-black:hover:not(.bg-black\/70):not(.bg-black\/80):not(.bg-black\/90) {
+  background-color: var(--bg-hover) !important;
+}
+
+.dark .hover\:text-zinc-100:hover { color: var(--text-primary) !important; }
+.dark .hover\:text-zinc-200:hover { color: var(--text-primary) !important; }
+.dark .hover\:text-zinc-300:hover { color: var(--text-secondary) !important; }
+.dark .hover\:text-zinc-400:hover { color: var(--text-secondary) !important; }
+.dark .hover\:text-zinc-600:hover { color: var(--text-muted) !important; }
+
+.dark .placeholder\:text-zinc-600::placeholder { color: var(--text-placeholder) !important; }
+.dark .placeholder\:text-zinc-700::placeholder { color: var(--text-placeholder) !important; }
+.dark .placeholder\:text-zinc-500::placeholder { color: var(--text-placeholder) !important; }
+
+.dark .focus\:border-zinc-700:focus { border-color: var(--border-focus) !important; }
+.dark .focus\:border-zinc-800:focus { border-color: var(--border-focus) !important; }
+.dark .ring-offset-black { --tw-ring-offset-color: var(--bg-app) !important; }
+
+/* ─── Dark TipTap editor placeholder ─── */
+.dark .ProseMirror p.is-editor-empty:first-child::before { color: var(--text-placeholder) !important; }
+
+/* ─── Light-mode zinc-* → tokens ─── */
 .light .bg-zinc-950,
 .light .bg-zinc-950\/50,
 .light .bg-zinc-950\/60,
 .light .bg-zinc-950\/80,
 .light .bg-zinc-950\/90,
-.light .bg-zinc-950\/95 { background-color: var(--bg-primary) !important; }
+.light .bg-zinc-950\/95 { background-color: var(--bg-app) !important; }
 
 .light .bg-zinc-900,
 .light .bg-zinc-900\/50,
 .light .bg-zinc-900\/60,
 .light .bg-zinc-900\/80,
 .light .bg-zinc-900\/90,
-.light .bg-zinc-900\/95 { background-color: var(--card) !important; }
+.light .bg-zinc-900\/95 { background-color: var(--bg-canvas) !important; }
 
 .light .bg-zinc-800,
 .light .bg-zinc-800\/30,
@@ -253,151 +783,379 @@
 .light .bg-zinc-800\/50,
 .light .bg-zinc-800\/60,
 .light .bg-zinc-800\/80,
-.light .bg-zinc-800\/90 { background-color: var(--bg-secondary) !important; }
+.light .bg-zinc-800\/90 { background-color: var(--bg-navigation) !important; }
 
 .light .bg-zinc-700,
 .light .bg-zinc-700\/30,
-.light .bg-zinc-700\/50 { background-color: var(--accent) !important; }
+.light .bg-zinc-700\/50 { background-color: var(--bg-elevated) !important; }
 
-/* Solid black backgrounds (page roots, sidebars) — flip to cream/white.
-   We DO NOT touch bg-black/70, /80, /90 because those are modal backdrops. */
-.light .bg-black:not(.bg-black\/70):not(.bg-black\/80):not(.bg-black\/90):not(.bg-black\/60):not(.bg-black\/50) { background-color: var(--bg-primary) !important; }
-.light .bg-black\/40 { background-color: rgba(250, 248, 243, 0.4) !important; }
-.light .bg-black\/30 { background-color: rgba(250, 248, 243, 0.3) !important; }
-.light .bg-black\/20 { background-color: rgba(250, 248, 243, 0.2) !important; }
-.light .bg-black\/10 { background-color: rgba(250, 248, 243, 0.1) !important; }
+.light .bg-black:not(.bg-black\/70):not(.bg-black\/80):not(.bg-black\/90):not(.bg-black\/60):not(.bg-black\/50) {
+  background-color: var(--bg-app) !important;
+}
+.light .bg-black\/40 { background-color: var(--backdrop-overlay) !important; }
+.light .bg-black\/30 { background-color: rgba(28, 25, 23, 0.30) !important; }
+.light .bg-black\/20 { background-color: rgba(28, 25, 23, 0.20) !important; }
+.light .bg-black\/10 { background-color: rgba(28, 25, 23, 0.10) !important; }
 
-/* Hardcoded hex backgrounds used in the codebase */
-.light .bg-\[\#0a0908\] { background-color: var(--bg-primary) !important; }
-.light .bg-\[\#14110f\] { background-color: var(--card) !important; }
-.light .bg-\[\#1a1612\] { background-color: var(--bg-secondary) !important; }
-.light .bg-\[\#0d0a07\] { background-color: var(--bg-primary) !important; }
-.light .bg-\[\#160d22\] { background-color: #f5f0fa !important; }
-.light .bg-\[\#2d1a3e\] { background-color: var(--accent) !important; }
+.light .bg-\[\#0a0908\] { background-color: var(--bg-app) !important; }
+.light .bg-\[\#14110f\] { background-color: var(--bg-canvas) !important; }
+.light .bg-\[\#1a1612\] { background-color: var(--bg-navigation) !important; }
+.light .bg-\[\#0d0a07\] { background-color: var(--bg-app) !important; }
+.light .bg-\[\#160d22\] { background-color: var(--bg-app) !important; }
+.light .bg-\[\#2d1a3e\] { background-color: var(--accent-soft) !important; }
 
-/* Gradient backgrounds — override dark gradients to light equivalents */
 .light .bg-gradient-to-br,
 .light .bg-gradient-to-tr,
 .light .bg-gradient-to-b,
 .light .bg-gradient-to-t { background-image: none !important; }
 
-/* ─── Text colors ─── */
 .light .text-zinc-100,
 .light .text-zinc-50 { color: var(--text-primary) !important; }
-.light .text-zinc-200 { color: #2a2522 !important; }
-.light .text-zinc-300 { color: #3f3530 !important; }
+.light .text-zinc-200 { color: var(--text-primary) !important; opacity: 0.92; }
+.light .text-zinc-300 { color: var(--text-secondary) !important; }
 .light .text-zinc-400 { color: var(--text-secondary) !important; }
-.light .text-zinc-500 { color: #6b5d4f !important; }
-.light .text-zinc-600 { color: #8a7c6b !important; }
-.light .text-zinc-700 { color: #a89478 !important; }
-.light .text-zinc-800 { color: #b89968 !important; }
-.light .text-zinc-900 { color: var(--text-primary) !important; }
+.light .text-zinc-500 { color: var(--text-muted) !important; }
+.light .text-zinc-600 { color: var(--text-muted) !important; }
+.light .text-zinc-700 { color: var(--text-muted) !important; opacity: 0.85; }
+.light .text-zinc-800 { color: var(--text-muted) !important; opacity: 0.7; }
+.light .text-zinc-900 { color: var(--text-muted) !important; opacity: 0.55; }
 
-/* Hardcoded hex text colors */
 .light .text-\[\#f8f5f2\] { color: var(--text-primary) !important; }
-.light .text-\[\#c9a96e\] { color: #8b6914 !important; }
-.light .text-\[\#8a7c6b\] { color: #6b5d4f !important; }
-.light .text-\[\#5d4037\] { color: #8a7c6b !important; }
-.light .text-\[\#1a1a1a\] { color: rgba(26, 22, 18, 0.15) !important; }
+.light .text-\[\#c9a96e\] { color: var(--accent-color) !important; }
+.light .text-\[\#8a7c6b\] { color: var(--text-secondary) !important; }
+.light .text-\[\#5d4037\] { color: var(--text-muted) !important; }
+.light .text-\[\#1a1a1a\] { color: var(--text-primary) !important; opacity: 0.85; }
 
-/* Keep white text white (used on colored buttons) but flip pure black text */
-.light .text-black { color: var(--bg-primary) !important; }
+.light .text-black { color: var(--text-primary) !important; }
 
-/* ─── Borders ─── */
 .light .border-zinc-800,
 .light .border-zinc-800\/50,
-.light .border-zinc-800\/30 { border-color: var(--border-color) !important; }
-.light .border-zinc-700 { border-color: rgba(26, 22, 18, 0.18) !important; }
-.light .border-zinc-900 { border-color: rgba(26, 22, 18, 0.08) !important; }
-.light .border-zinc-600 { border-color: rgba(26, 22, 18, 0.25) !important; }
-.light .border-zinc-700\/30 { border-color: rgba(26, 22, 18, 0.15) !important; }
+.light .border-zinc-800\/30 { border-color: var(--border-default) !important; }
+.light .border-zinc-700 { border-color: var(--border-strong) !important; }
+.light .border-zinc-900 { border-color: var(--border-subtle) !important; }
+.light .border-zinc-600 { border-color: var(--border-strong) !important; }
+.light .border-zinc-700\/30 { border-color: var(--border-default) !important; }
 .light .border-black,
-.light .border-black\/10 { border-color: rgba(26, 22, 18, 0.15) !important; }
+.light .border-black\/10 { border-color: var(--border-default) !important; }
 
-/* Hardcoded hex borders */
 .light .border-\[\#1a1a1a\],
-.light .border-\[\#1a1a1a\]\/50 { border-color: rgba(26, 22, 18, 0.10) !important; }
-.light .border-\[\#14110f\] { border-color: rgba(26, 22, 18, 0.10) !important; }
-.light .border-\[\#2d1a3e\] { border-color: rgba(139, 92, 246, 0.30) !important; }
+.light .border-\[\#1a1a1a\]\/50 { border-color: var(--border-default) !important; }
+.light .border-\[\#14110f\] { border-color: var(--border-subtle) !important; }
+.light .border-\[\#2d1a3e\] { border-color: var(--accent-color) !important; opacity: 0.4; }
 
-/* Divider borders (border-t, border-b, border-r, border-l) */
-.light .border-t-zinc-900 { border-top-color: rgba(26, 22, 18, 0.08) !important; }
-.light .border-t-zinc-800 { border-top-color: rgba(26, 22, 18, 0.12) !important; }
-.light .border-b-zinc-800 { border-bottom-color: rgba(26, 22, 18, 0.12) !important; }
-.light .border-r-zinc-900 { border-right-color: rgba(26, 22, 18, 0.08) !important; }
-.light .border-l-zinc-900 { border-left-color: rgba(26, 22, 18, 0.08) !important; }
+.light .border-t-zinc-900 { border-top-color: var(--border-subtle) !important; }
+.light .border-t-zinc-800 { border-top-color: var(--border-default) !important; }
+.light .border-b-zinc-800 { border-bottom-color: var(--border-default) !important; }
+.light .border-r-zinc-900 { border-right-color: var(--border-subtle) !important; }
+.light .border-l-zinc-900 { border-left-color: var(--border-subtle) !important; }
 
-/* ─── Hover state backgrounds ─── */
-.light .hover\:bg-zinc-800:hover { background-color: var(--bg-secondary) !important; }
-.light .hover\:bg-zinc-800\/50:hover { background-color: rgba(240, 236, 227, 0.5) !important; }
-.light .hover\:bg-zinc-800\/30:hover { background-color: rgba(240, 236, 227, 0.3) !important; }
-.light .hover\:bg-zinc-700:hover { background-color: var(--accent) !important; }
-.light .hover\:bg-zinc-900:hover { background-color: var(--card) !important; }
-.light .hover\:bg-zinc-950:hover { background-color: var(--bg-primary) !important; }
-.light .hover\:bg-black:hover:not(.bg-black\/70):not(.bg-black\/80):not(.bg-black\/90) { background-color: var(--bg-secondary) !important; }
-
-/* ─── Hover state text colors ─── */
-.light .hover\:text-zinc-100:hover { color: var(--text-primary) !important; }
-.light .hover\:text-zinc-200:hover { color: #2a2522 !important; }
-.light .hover\:text-zinc-300:hover { color: #3f3530 !important; }
-.light .hover\:text-zinc-400:hover { color: var(--text-secondary) !important; }
-.light .hover\:text-zinc-600:hover { color: #8a7c6b !important; }
-
-/* ─── Placeholder text ─── */
-.light .placeholder\:text-zinc-600::placeholder { color: #a89478 !important; }
-.light .placeholder\:text-zinc-700::placeholder { color: #b89968 !important; }
-.light .placeholder\:text-zinc-500::placeholder { color: #8a7c6b !important; }
-
-/* ─── Selection / focus ─── */
-.light .focus\:border-zinc-700:focus { border-color: rgba(26, 22, 18, 0.25) !important; }
-.light .focus\:border-zinc-800:focus { border-color: rgba(26, 22, 18, 0.18) !important; }
-.light .ring-offset-black { --tw-ring-offset-color: var(--bg-primary) !important; }
-
-/* ─── Prose / editor content ─── */
-.light .prose-invert { --tw-prose-body: var(--text-primary); --tw-prose-headings: var(--text-primary); --tw-prose-bold: var(--text-primary); --tw-prose-code: var(--text-primary); }
-.light .prose-invert p,
-.light .prose-invert h1,
-.light .prose-invert h2,
-.light .prose-invert h3,
-.light .prose-invert strong,
-.light .prose-invert li,
-.light .prose-invert a { color: var(--text-primary) !important; }
-
-/* ─── Form controls ─── */
-.light select,
-.light input,
-.light textarea { color: var(--text-primary); }
-.light select option { background-color: var(--card); color: var(--text-primary); }
-
-/* ─── TipTap editor placeholder ─── */
-.light .ProseMirror p.is-editor-empty:first-child::before { color: #a89478 !important; }
-
-/* ─── Scrollbar (light variant) ─── */
-.light .lc-scroll::-webkit-scrollbar-thumb { background: rgba(139, 105, 20, 0.25); }
-.light .lc-scroll::-webkit-scrollbar-thumb:hover { background: rgba(139, 105, 20, 0.45); }
-
-/* ═══════════════════════════════════════════════════════════════
-   ACCENT COLOR ENGINE
-   ───────────────────────────────────────────────────────────────
-   Any element that uses `bg-accent-color` / `text-accent-color` /
-   `border-accent-color` utilities (mapped above in @theme inline)
-   will instantly recolor when JS sets --accent-color via
-   document.documentElement.style.setProperty('--accent-color', hex).
-
-   Additionally, we expose `.accent-bg`, `.accent-text`, `.accent-border`
-   helper classes that map to the same variable, for use in inline
-   styles or custom components.
-   ═══════════════════════════════════════════════════════════════ */
-.accent-bg { background-color: var(--accent-color) !important; }
-.accent-text { color: var(--accent-color) !important; }
-.accent-border { border-color: var(--accent-color) !important; }
-.accent-ring { box-shadow: 0 0 0 2px var(--accent-color) !important; }
-
-/* Buttons that should follow the accent color use .btn-accent */
-.btn-accent {
-  background-color: var(--accent-color);
-  color: #ffffff;
-  transition: filter 0.15s ease;
+.light .hover\:bg-zinc-800:hover { background-color: var(--bg-hover) !important; }
+.light .hover\:bg-zinc-800\/50:hover { background-color: var(--bg-hover) !important; }
+.light .hover\:bg-zinc-800\/30:hover { background-color: var(--bg-hover) !important; }
+.light .hover\:bg-zinc-700:hover { background-color: var(--bg-pressed) !important; }
+.light .hover\:bg-zinc-900:hover { background-color: var(--bg-hover) !important; }
+.light .hover\:bg-zinc-950:hover { background-color: var(--bg-hover) !important; }
+.light .hover\:bg-black:hover:not(.bg-black\/70):not(.bg-black\/80):not(.bg-black\/90) {
+  background-color: var(--bg-hover) !important;
 }
-.btn-accent:hover { filter: brightness(1.1); }
-.btn-accent:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.light .hover\:text-zinc-100:hover { color: var(--text-primary) !important; }
+.light .hover\:text-zinc-200:hover { color: var(--text-primary) !important; }
+.light .hover\:text-zinc-300:hover { color: var(--text-secondary) !important; }
+.light .hover\:text-zinc-400:hover { color: var(--text-secondary) !important; }
+.light .hover\:text-zinc-600:hover { color: var(--text-muted) !important; }
+
+.light .placeholder\:text-zinc-600::placeholder { color: var(--text-placeholder) !important; }
+.light .placeholder\:text-zinc-700::placeholder { color: var(--text-placeholder) !important; }
+.light .placeholder\:text-zinc-500::placeholder { color: var(--text-placeholder) !important; }
+
+.light .focus\:border-zinc-700:focus { border-color: var(--border-focus) !important; }
+.light .focus\:border-zinc-800:focus { border-color: var(--border-focus) !important; }
+.light .ring-offset-black { --tw-ring-offset-color: var(--bg-app) !important; }
+
+/* Prose / editor content — both modes */
+.prose-invert {
+  --tw-prose-body: var(--text-primary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-code: var(--text-primary);
+}
+.prose-invert p,
+.prose-invert h1,
+.prose-invert h2,
+.prose-invert h3,
+.prose-invert strong,
+.prose-invert li,
+.prose-invert a { color: var(--text-primary) !important; }
+
+.light .ProseMirror p.is-editor-empty:first-child::before { color: var(--text-placeholder) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RAW SEMANTIC COLOR OVERRIDES
+   ───────────────────────────────────────────────────────────────────────────
+   The codebase uses Tailwind's red/green/amber/blue palette directly for
+   semantic indicators (delete buttons, success toasts, warning badges, info
+   links). We remap these to our semantic tokens (--color-danger, etc.) so
+   they remain semantically correct AND respond to the design system.
+   Soft variants (bg-red-500/10) are remapped to soft token backgrounds.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Danger (red) — solid */
+.dark .bg-red-500, .light .bg-red-500,
+.dark .bg-red-600, .light .bg-red-600 { background-color: var(--color-danger) !important; }
+.dark .text-red-300, .light .text-red-300,
+.dark .text-red-400, .light .text-red-400,
+.dark .text-red-500, .light .text-red-500,
+.dark .text-red-600, .light .text-red-600 { color: var(--color-danger) !important; }
+
+/* Danger — soft backgrounds (e.g. bg-red-500/10) */
+.dark .bg-red-500\/5, .light .bg-red-500\/5,
+.dark .bg-red-500\/10, .light .bg-red-500\/10 { background-color: var(--color-danger-soft) !important; }
+.dark .hover\:bg-red-500\/10:hover, .light .hover\:bg-red-500\/10:hover { background-color: var(--color-danger-soft) !important; }
+.dark .bg-red-500\/20, .light .bg-red-500\/20 { background-color: var(--color-danger-soft) !important; }
+.dark .border-red-500\/30, .light .border-red-500\/30 { border-color: var(--color-danger) !important; opacity: 0.4; }
+
+/* Success (green) — solid */
+.dark .bg-green-500, .light .bg-green-500,
+.dark .bg-green-600, .light .bg-green-600 { background-color: var(--color-success) !important; }
+.dark .text-green-400, .light .text-green-400,
+.dark .text-green-500, .light .text-green-500,
+.dark .text-green-600, .light .text-green-600 { color: var(--color-success) !important; }
+.dark .bg-green-500\/10, .light .bg-green-500\/10 { background-color: var(--color-success-soft) !important; }
+
+/* Warning (amber) — solid */
+.dark .bg-amber-500, .light .bg-amber-500 { background-color: var(--color-warning) !important; }
+.dark .text-amber-500, .light .text-amber-500,
+.dark .text-amber-400, .light .text-amber-400,
+.dark .text-amber-600, .light .text-amber-600 { color: var(--color-warning) !important; }
+.dark .text-amber-500\/70, .light .text-amber-500\/70 { color: var(--color-warning) !important; opacity: 0.7; }
+.dark .bg-amber-500\/10, .light .bg-amber-500\/10 { background-color: var(--color-warning-soft) !important; }
+
+/* Info (blue) — solid */
+.dark .bg-blue-500, .light .bg-blue-500 { background-color: var(--color-info) !important; }
+.dark .text-blue-400, .light .text-blue-400,
+.dark .text-blue-500, .light .text-blue-500 { color: var(--color-info) !important; }
+.dark .bg-blue-500\/10, .light .bg-blue-500\/10 { background-color: var(--color-info-soft) !important; }
+
+/* ─── Legacy rgba() patterns from earlier dark-academia theme ─── */
+/* rgba(201,169,110,X) was the old gold accent — map to current accent tokens */
+.dark .border-\[rgba\(201\,169\,110\,0\.08\)\],
+.light .border-\[rgba\(201\,169\,110\,0\.08\)\] { border-color: var(--border-subtle) !important; }
+.dark .border-\[rgba\(201\,169\,110\,0\.1\)\],
+.light .border-\[rgba\(201\,169\,110\,0\.1\)\] { border-color: var(--border-default) !important; }
+.dark .border-\[rgba\(201\,169\,110\,0\.12\)\],
+.light .border-\[rgba\(201\,169\,110\,0\.12\)\] { border-color: var(--border-default) !important; }
+.dark .border-\[rgba\(201\,169\,110\,0\.15\)\],
+.light .border-\[rgba\(201\,169\,110\,0\.15\)\] { border-color: var(--border-input) !important; }
+.dark .border-\[rgba\(201\,169\,110\,0\.2\)\],
+.light .border-\[rgba\(201\,169\,110\,0\.2\)\] { border-color: var(--border-strong) !important; }
+.dark .border-\[rgba\(201\,169\,110\,0\.25\)\]:hover,
+.light .border-\[rgba\(201\,169\,110\,0\.25\)\]:hover { border-color: var(--border-focus) !important; }
+.dark .border-\[rgba\(201\,169\,110\,0\.3\)\],
+.light .border-\[rgba\(201\,169\,110\,0\.3\)\] { border-color: var(--border-focus) !important; }
+
+.dark .bg-\[rgba\(201\,169\,110\,0\.06\)\]:hover,
+.light .bg-\[rgba\(201\,169\,110\,0\.06\)\]:hover { background-color: var(--bg-hover) !important; }
+.dark .bg-\[rgba\(201\,169\,110\,0\.08\)\],
+.light .bg-\[rgba\(201\,169\,110\,0\.08\)\] { background-color: var(--bg-selected) !important; }
+
+.dark .bg-\[rgba\(20\,17\,15\,0\.6\)\],
+.light .bg-\[rgba\(20\,17\,15\,0\.6\)\] { background-color: var(--bg-input) !important; }
+.dark .bg-\[rgba\(20\,17\,15\,0\.8\)\],
+.light .bg-\[rgba\(20\,17\,15\,0\.8\)\] { background-color: var(--bg-input) !important; }
+.dark .bg-\[rgba\(20\,17\,15\,0\.9\)\],
+.light .bg-\[rgba\(20\,17\,15\,0\.9\)\] { background-color: var(--bg-input) !important; }
+
+.dark .bg-\[\#0a0908\]\/80,
+.light .bg-\[\#0a0908\]\/80 { background-color: var(--bg-dropdown) !important; }
+
+/* Map the gold accent text to the dynamic accent color */
+.dark .text-\[\#c4b9a8\], .light .text-\[\#c4b9a8\] { color: var(--text-secondary) !important; }
+.dark .text-\[\#d4b87a\], .light .text-\[\#d4b87a\] { color: var(--accent-color) !important; }
+.dark .hover\:text-\[\#d4b87a\]:hover, .light .hover\:text-\[\#d4b87a\]:hover { color: var(--accent-color) !important; opacity: 0.85; }
+.dark .hover\:text-\[\#c9a96e\]:hover, .light .hover\:text-\[\#c9a96e\]:hover { color: var(--accent-color) !important; }
+.dark .hover\:border-\[\#c9a96e\]:hover, .light .hover\:border-\[\#c9a96e\]:hover { border-color: var(--accent-color) !important; }
+.dark .border-\[\#c9a96e\], .light .border-\[\#c9a96e\] { border-color: var(--accent-color) !important; }
+.dark .focus\:border-\[\#c9a96e\]:focus, .light .focus\:border-\[\#c9a96e\]:focus { border-color: var(--accent-color) !important; }
+
+/* Map deprecated "ruby" and other custom color utilities (used in settings-modal) */
+.dark .text-ruby-300, .light .text-ruby-300,
+.dark .text-ruby-400, .light .text-ruby-400 { color: var(--color-danger) !important; }
+.dark .bg-ruby-500\/10, .light .bg-ruby-500\/10 { background-color: var(--color-danger-soft) !important; }
+.dark .border-ruby-500\/60, .light .border-ruby-500\/60 { border-color: var(--color-danger) !important; opacity: 0.5; }
+
+/* bg-red-950 (used in settings) → soft danger */
+.dark .bg-red-950\/40, .light .bg-red-950\/40 { background-color: var(--color-danger-soft) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PREMIUM COMPONENT POLISH (token-driven)
+   These rules enhance existing shadcn components without changing their
+   structure. They layer on top of utility classes already in JSX.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Dialogs & modals — elevated surface, soft shadow, no harsh border */
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"],
+[data-slot="sheet-content"],
+[data-slot="drawer-content"] {
+  background-color: var(--bg-dialog) !important;
+  border-color: var(--border-subtle) !important;
+  box-shadow: var(--shadow-pop) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-slot="dialog-overlay"],
+[data-slot="alert-dialog-overlay"],
+[data-slot="sheet-overlay"] {
+  background-color: var(--backdrop-overlay) !important;
+  backdrop-filter: blur(2px);
+}
+
+/* Dropdowns & popovers — distinct elevated surface */
+[data-slot="dropdown-menu-content"],
+[data-slot="popover-content"],
+[data-slot="context-menu-content"],
+[data-slot="menubar-content"],
+[data-slot="hover-card-content"],
+[data-slot="navigation-menu-content"] {
+  background-color: var(--bg-dropdown) !important;
+  border-color: var(--border-subtle) !important;
+  box-shadow: var(--shadow-pop) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-slot="dropdown-menu-item"],
+[data-slot="context-menu-item"],
+[data-slot="menubar-item"] {
+  color: var(--text-primary) !important;
+  transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+[data-slot="dropdown-menu-item"]:hover,
+[data-slot="dropdown-menu-item"][data-highlighted],
+[data-slot="context-menu-item"]:hover,
+[data-slot="context-menu-item"][data-highlighted],
+[data-slot="menubar-item"]:hover,
+[data-slot="menubar-item"][data-highlighted] {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-slot="dropdown-menu-item"][data-disabled],
+[data-slot="context-menu-item"][data-disabled] {
+  color: var(--text-disabled) !important;
+  opacity: 0.6;
+}
+
+/* Tooltips — inverted surface for maximum legibility */
+[data-slot="tooltip-content"] {
+  background-color: var(--bg-tooltip) !important;
+  color: var(--text-on-tooltip) !important;
+  border: none !important;
+  box-shadow: var(--shadow-md) !important;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+/* Cards — subtle border + tiny shadow, no harsh outline */
+[data-slot="card"] {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-subtle) !important;
+  box-shadow: var(--shadow-sm) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-slot="card-title"] { color: var(--text-primary) !important; font-weight: 600; }
+[data-slot="card-description"] { color: var(--text-secondary) !important; }
+
+/* Inputs — clear border, focus ring */
+[data-slot="input"],
+[data-slot="textarea"] {
+  background-color: var(--bg-input) !important;
+  border-color: var(--border-input) !important;
+  color: var(--text-primary) !important;
+  transition: border-color 140ms ease-out, box-shadow 140ms ease-out, background-color 140ms ease-out;
+}
+[data-slot="input"]::placeholder,
+[data-slot="textarea"]::placeholder { color: var(--text-placeholder) !important; }
+
+[data-slot="input"]:focus-visible,
+[data-slot="textarea"]:focus-visible {
+  border-color: var(--accent-color) !important;
+  box-shadow: 0 0 0 3px var(--ring-focus) !important;
+  outline: none;
+}
+
+[data-slot="input"]:disabled,
+[data-slot="textarea"]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Tabs — clean, minimal indicator */
+[data-slot="tabs-trigger"] {
+  color: var(--text-secondary) !important;
+  transition: color 140ms ease-out, background-color 140ms ease-out;
+}
+[data-slot="tabs-trigger"]:hover {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-hover) !important;
+}
+[data-slot="tabs-trigger"][data-state="active"] {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-canvas) !important;
+  box-shadow: var(--shadow-xs) !important;
+}
+
+[data-slot="tabs-list"] {
+  background-color: var(--bg-navigation) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+/* Buttons — premium interaction states */
+[data-slot="button"] {
+  transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 150ms cubic-bezier(0.16, 1, 0.3, 1),
+              filter 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-slot="button"]:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+[data-slot="button"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Scrollbar (both modes) */
+.lc-scroll::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
+.lc-scroll::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ACCESSIBILITY — WCAG AA contrast helpers
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sr-only-focusable:not(:focus):not(:focus-within) {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .status-online { animation: none !important; }
+}

@@ -33,8 +33,8 @@ export default function Home() {
 
   if (booting || user === undefined) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-        <span className="font-serif text-2xl text-red-500 tracking-wider">L-C</span>
+      <div className="min-h-screen flex items-center justify-center bg-bg-app">
+        <span className="font-serif text-2xl text-accent-color tracking-wider">L-C</span>
       </div>
     )
   }

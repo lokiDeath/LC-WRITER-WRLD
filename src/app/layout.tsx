@@ -43,17 +43,26 @@ export default function RootLayout({
   // The html element defaults to "dark"; this script may swap it to "light"
   // based on the saved `lc_theme` localStorage value. It also restores the
   // saved accent color via setProperty('--accent-color', hex).
+  // We set BOTH the legacy .dark/.light class AND the canonical
+  // data-theme attribute so all selectors (legacy + new) activate together.
   const themeBootstrap = `(function(){try{
     var t=localStorage.getItem('lc_theme');
     var root=document.documentElement;
-    if(t==='light'){root.classList.remove('dark');root.classList.add('light');}
-    else{root.classList.remove('light');root.classList.add('dark');}
+    if(t==='light'){
+      root.classList.remove('dark');
+      root.classList.add('light');
+      root.setAttribute('data-theme','light');
+    } else {
+      root.classList.remove('light');
+      root.classList.add('dark');
+      root.setAttribute('data-theme','dark');
+    }
     var a=localStorage.getItem('lc_accent_color_hex');
     if(a){root.style.setProperty('--accent-color',a);}
   }catch(e){}})();`
 
   return (
-    <html lang="en" suppressHydrationWarning className="dark">
+    <html lang="en" suppressHydrationWarning className="dark" data-theme="dark">
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
