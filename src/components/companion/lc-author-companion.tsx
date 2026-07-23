@@ -1,224 +1,41 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
-import { Bell, BookOpen, FolderOpen, MessageSquare, PenLine, Send, Settings2, Sparkles, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Send, X } from 'lucide-react'
 
-type CompanionAppearance = 'scholar' | 'scholarine'
-type CompanionMood = 'idle' | 'writing' | 'thinking' | 'celebrating' | 'alert'
+type Mood = 'idle' | 'writing' | 'thinking' | 'celebrating' | 'alert'
+type Prefs = { name: string; appearance: 'male' | 'female'; enabled: boolean; reducedMotion: boolean; size: 'small' | 'normal' | 'large'; position?: { x: number; y: number } }
+type Signal = { mood?: Mood; message?: string }
+const KEY = 'lc_author_companion_v1'
+const defaults: Prefs = { name: 'Scholar', appearance: 'male', enabled: true, reducedMotion: false, size: 'normal' }
+export function dispatchCompanionSignal(signal: Signal) { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent<Signal>('lc-companion-signal', { detail: signal })) }
 
-type CompanionSettings = {
-  name: string
-  appearance: CompanionAppearance
-  enabled: boolean
-  reducedMotion: boolean
-  color: string
-  position?: { x: number; y: number }
+export function LCAuthorCompanion({ projectName, isProjectWorkspace, onOpenChat }: { projectName?: string | null; isProjectWorkspace: boolean; onOpenChat: () => void; onOpenProjects: () => void }) {
+  const [ready, setReady] = useState(false); const [prefs, setPrefs] = useState<Prefs>(defaults); const [mood, setMood] = useState<Mood>('idle'); const [chatOpen, setChatOpen] = useState(false); const [settingsOpen, setSettingsOpen] = useState(false); const [prompt, setPrompt] = useState(''); const [bubble, setBubble] = useState(''); const [face, setFace] = useState({ x: 0, y: 0 }); const drag = useRef<{ x: number; y: number } | null>(null); const mascot = useRef<HTMLDivElement>(null)
+  useEffect(() => { try { const v = localStorage.getItem(KEY); if (v) setPrefs({ ...defaults, ...JSON.parse(v) }) } catch {} setReady(true) }, [])
+  useEffect(() => { if (ready) try { localStorage.setItem(KEY, JSON.stringify(prefs)) } catch {} }, [prefs, ready])
+  useEffect(() => { const fn = (e: Event) => { const s = (e as CustomEvent<Signal>).detail; if (s?.mood) setMood(s.mood); if (s?.message) { setBubble(s.message); setTimeout(() => setBubble(''), 3500) } }; window.addEventListener('lc-companion-signal', fn); return () => window.removeEventListener('lc-companion-signal', fn) }, [])
+  useEffect(() => { const move = (e: PointerEvent) => { if (!drag.current) { const r = mascot.current?.getBoundingClientRect(); if (!r) return; setFace({ x: Math.max(-4, Math.min(4, (e.clientX-(r.left+r.width/2))/80)), y: Math.max(-3, Math.min(3, (e.clientY-(r.top+r.height/2))/80)) }); return } const w = mascot.current?.offsetWidth || 250; setPrefs(p => ({ ...p, position: { x: Math.max(12, Math.min(innerWidth-w-12, e.clientX-drag.current!.x)), y: Math.max(12, Math.min(innerHeight-120, e.clientY-drag.current!.y)) } })) }; const up = () => { drag.current = null }; window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) } }, [])
+  if (!ready) return null
+  const scale = prefs.size === 'small' ? .78 : prefs.size === 'large' ? 1.22 : 1
+  function save(next: Partial<Prefs>) { setPrefs(p => ({ ...p, ...next })) }
+  function send() { const text = prompt.trim(); if (!text) return; if (isProjectWorkspace) { window.dispatchEvent(new CustomEvent('lc-companion-prompt', { detail: { prompt: text } })); setBubble('Prompt placed in your project co-pilot.'); setMood('thinking') } else { onOpenChat(); setBubble('Chat opened.'); } setPrompt('') }
+  if (!prefs.enabled) return <button onClick={() => save({ enabled: true })} className="fixed bottom-5 right-5 z-[10020] rounded-full bg-blue-600 px-3 py-2 text-xs text-white shadow-xl">Restore companion</button>
+  return <aside ref={mascot} style={{ left: prefs.position?.x, top: prefs.position?.y, transform: `scale(${scale})`, transformOrigin: 'top left' }} className={`fixed ${prefs.position ? '' : 'bottom-8 right-8'} z-[10020] flex w-80 flex-col items-center select-none`} aria-label="Writing companion">
+    {bubble && <div className="absolute -top-10 z-30 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-100 shadow-2xl">{bubble}</div>}
+    <div onPointerDown={e => { if ((e.target as Element).closest('button,input')) return; const r = mascot.current!.getBoundingClientRect(); drag.current = { x: e.clientX-r.left, y: e.clientY-r.top }; setBubble('Wheee! Moving around!') }} className={`relative h-56 w-56 cursor-grab touch-none ${prefs.reducedMotion ? '' : 'lc-ref-bob'}`}>
+      {[['left-[22%] top-[12%] bg-cyan-400'],['right-[26%] top-[8%] bg-blue-400'],['left-[15%] top-[34%] bg-purple-400'],['right-[14%] top-[28%] bg-indigo-400']].map(([classes], i) => <button key={i} onPointerDown={e=>e.stopPropagation()} onClick={()=>setSettingsOpen(true)} className={`lc-ref-dot absolute ${classes} z-20 h-3.5 w-3.5 rounded-full border-2 border-black`} aria-label="Open companion settings" />)}
+      <Mascot appearance={prefs.appearance} mood={mood} face={face} onPhone={() => setChatOpen(v => !v)} />
+    </div>
+    {chatOpen && <div onPointerDown={e=>e.stopPropagation()} className="mt-2 flex w-80 flex-col gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur-md">
+      <div className="flex items-center justify-between border-b border-zinc-900 pb-2 text-[11px] font-mono text-zinc-400"><span><i className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />{prefs.name} Phone Active</span><button onClick={()=>setChatOpen(false)} aria-label="Close companion chat" className="p-1 text-zinc-400 hover:text-white"><X className="h-3.5 w-3.5" /></button></div>
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-2 text-[11px] text-zinc-400">💬 <b className="text-sky-400">{prefs.name}:</b> Type a prompt for your co-pilot.</div>
+      <div className="flex items-center rounded-xl border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 focus-within:border-sky-500"><input value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')send()}} placeholder="Type a message or prompt..." className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none"/><button onClick={send} className="rounded-lg bg-blue-600 p-1.5 text-white"><Send className="h-3.5 w-3.5" /></button></div>
+    </div>}
+    {settingsOpen && <Settings prefs={prefs} save={save} mood={mood} setMood={setMood} close={()=>setSettingsOpen(false)} />}
+  </aside>
 }
 
-type CompanionSignal = {
-  mood?: CompanionMood
-  message?: string
-}
+function Settings({ prefs, save, mood, setMood, close }: { prefs: Prefs; save:(v:Partial<Prefs>)=>void; mood:Mood; setMood:(v:Mood)=>void; close:()=>void }) { return <div onPointerDown={e=>e.stopPropagation()} className="absolute left-1/2 top-1/2 z-50 w-[min(22rem,92vw)] -translate-x-1/2 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl"><div className="mb-3 flex justify-between"><b className="text-sm">Mascot settings</b><button onClick={close}><X className="h-4 w-4" /></button></div><label className="block text-xs text-zinc-400">Name<input value={prefs.name} onChange={e=>save({name:e.target.value})} className="mt-1 w-full rounded bg-zinc-900 p-2 text-white" /></label><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={()=>save({appearance:'male'})} className={prefs.appearance==='male'?'rounded bg-blue-600 p-2 text-xs':'rounded bg-zinc-900 p-2 text-xs'}>Male</button><button onClick={()=>save({appearance:'female'})} className={prefs.appearance==='female'?'rounded bg-blue-600 p-2 text-xs':'rounded bg-zinc-900 p-2 text-xs'}>Female</button></div><div className="mt-3 flex justify-between text-xs"><label>Reduced motion <input type="checkbox" checked={prefs.reducedMotion} onChange={e=>save({reducedMotion:e.target.checked})}/></label><label>Turn off <input type="checkbox" checked={!prefs.enabled} onChange={e=>save({enabled:!e.target.checked})}/></label></div><div className="mt-3 grid grid-cols-3 gap-1">{(['small','normal','large'] as const).map(s=><button key={s} onClick={()=>save({size:s})} className={prefs.size===s?'rounded bg-blue-600 p-2 text-xs':'rounded bg-zinc-900 p-2 text-xs'}>{s}</button>)}</div><div className="mt-3 grid grid-cols-4 gap-1">{(['idle','writing','thinking','celebrating'] as Mood[]).map(s=><button key={s} onClick={()=>setMood(s)} className={mood===s?'rounded bg-blue-600 p-2 text-[10px]':'rounded bg-zinc-900 p-2 text-[10px]'}>{s}</button>)}</div></div> }
 
-const STORAGE_KEY = 'lc_author_companion_v1'
-const defaults: CompanionSettings = { name: 'Ink', appearance: 'scholar', enabled: true, reducedMotion: false, color: '#3b82f6' }
-
-export function dispatchCompanionSignal(signal: CompanionSignal) {
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent<CompanionSignal>('lc-companion-signal', { detail: signal }))
-}
-
-type LCAuthorCompanionProps = {
-  projectName?: string | null
-  isProjectWorkspace: boolean
-  onOpenChat: () => void
-  onOpenProjects: () => void
-}
-
-export function LCAuthorCompanion({ projectName, isProjectWorkspace, onOpenChat, onOpenProjects }: LCAuthorCompanionProps) {
-  const [mounted, setMounted] = useState(false)
-  const [settings, setSettings] = useState<CompanionSettings>(defaults)
-  const [open, setOpen] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [mood, setMood] = useState<CompanionMood>('idle')
-  const [notice, setNotice] = useState<string | null>(null)
-  const [systemReducedMotion, setSystemReducedMotion] = useState(false)
-  const [draftPrompt, setDraftPrompt] = useState('')
-  const dragRef = useRef<{ offsetX: number; offsetY: number } | null>(null)
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) setSettings({ ...defaults, ...JSON.parse(saved) })
-      setSystemReducedMotion(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
-    } catch {
-      // Local settings are optional; the companion still works with defaults.
-    }
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    if (!mounted) return
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)) } catch { /* optional storage */ }
-  }, [mounted, settings])
-
-  useEffect(() => {
-    const refreshSettings = () => {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY)
-        if (saved) setSettings({ ...defaults, ...JSON.parse(saved) })
-      } catch { /* keep current settings */ }
-    }
-    window.addEventListener('lc-companion-settings', refreshSettings)
-    return () => window.removeEventListener('lc-companion-settings', refreshSettings)
-  }, [])
-
-  useEffect(() => {
-    const move = (event: PointerEvent) => {
-      if (!dragRef.current) return
-      const width = Math.min(window.innerWidth - 20, 340)
-      const nextX = Math.max(8, Math.min(window.innerWidth - width - 8, event.clientX - dragRef.current.offsetX))
-      const nextY = Math.max(8, Math.min(window.innerHeight - 130, event.clientY - dragRef.current.offsetY))
-      setSettings((current) => ({ ...current, position: { x: nextX, y: nextY } }))
-    }
-    const end = () => { dragRef.current = null }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', end)
-    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end) }
-  }, [])
-
-  useEffect(() => {
-    const receiveSignal = (event: Event) => {
-      const signal = (event as CustomEvent<CompanionSignal>).detail
-      if (!signal) return
-      if (signal.mood) setMood(signal.mood)
-      if (signal.message) {
-        setNotice(signal.message)
-        setMood(signal.mood ?? 'alert')
-        window.setTimeout(() => setNotice(null), 5000)
-      }
-    }
-    window.addEventListener('lc-companion-signal', receiveSignal)
-    return () => window.removeEventListener('lc-companion-signal', receiveSignal)
-  }, [])
-
-  useEffect(() => {
-    if (mood !== 'celebrating' && mood !== 'alert') return
-    const timer = window.setTimeout(() => setMood('idle'), 1800)
-    return () => window.clearTimeout(timer)
-  }, [mood])
-
-  const reduceMotion = settings.reducedMotion || systemReducedMotion
-  const statusText = useMemo(() => {
-    if (notice) return notice
-    if (mood === 'thinking') return `${settings.name} is thinking…`
-    if (mood === 'writing') return `${settings.name} is writing alongside you.`
-    return isProjectWorkspace ? `Ready for ${projectName || 'this project'}.` : 'Ready when inspiration arrives.'
-  }, [isProjectWorkspace, mood, notice, projectName, settings.name])
-
-  function updateSettings(update: Partial<CompanionSettings>) {
-    setSettings((current) => ({ ...current, ...update }))
-  }
-
-  function choosePrompt(prompt: string) {
-    window.dispatchEvent(new CustomEvent('lc-companion-prompt', { detail: { prompt } }))
-    setNotice('Prompt placed in your project co-pilot.')
-    setOpen(false)
-  }
-
-  function submitPrompt() {
-    const prompt = draftPrompt.trim()
-    if (!prompt) return
-    if (isProjectWorkspace) choosePrompt(prompt)
-    else { onOpenChat(); setNotice('Chat opened. Ask your question there.'); setOpen(false) }
-    setDraftPrompt('')
-  }
-
-  function beginDrag(event: PointerEvent<HTMLButtonElement>) {
-    if (event.button !== 0) return
-    const rect = event.currentTarget.closest('aside')?.getBoundingClientRect()
-    if (!rect) return
-    dragRef.current = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top }
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-
-  if (!mounted) return null
-
-  return (
-    <aside style={settings.position ? { left: settings.position.x, top: settings.position.y } : undefined} className={`fixed ${settings.position ? '' : 'bottom-5 right-4 sm:bottom-7 sm:right-7'} z-[10020] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2`} aria-label="Writing companion">
-      {notice && !open && <div role="status" className="max-w-64 rounded-xl border border-sky-400/25 bg-zinc-950/95 px-3 py-2 text-xs text-zinc-200 shadow-2xl backdrop-blur">{notice}</div>}
-      {open && (
-        <section className="w-[min(21rem,calc(100vw-2rem))] rounded-2xl border border-sky-400/20 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur-xl" onClick={(event) => event.stopPropagation()}>
-          <div className="mb-3 flex items-center justify-between border-b border-zinc-800 pb-2">
-            <div>
-              <p className="text-sm font-medium text-zinc-100">{settings.name}</p>
-              <p className="max-w-52 truncate text-[10px] text-zinc-500">{isProjectWorkspace ? projectName || 'Project workspace' : 'General companion'}</p>
-            </div>
-            <div className="flex gap-1">
-              <button onClick={() => setShowSettings((value) => !value)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white" aria-label="Companion settings"><Settings2 className="h-4 w-4" /></button>
-              <button onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white" aria-label="Close companion panel"><X className="h-4 w-4" /></button>
-            </div>
-          </div>
-          {showSettings ? <CompanionSettings settings={settings} updateSettings={updateSettings} /> : isProjectWorkspace ? (
-            <div className="space-y-1">
-              <Action label="Continue writing" icon={<PenLine className="h-4 w-4 text-sky-300" />} onClick={() => choosePrompt('Continue writing from where I stopped.')} />
-              <Action label="Summarize current chapter" icon={<BookOpen className="h-4 w-4 text-violet-300" />} onClick={() => choosePrompt('Summarize the current chapter and identify its key changes.')} />
-              <Action label="Check Story Bible" icon={<Sparkles className="h-4 w-4 text-amber-300" />} onClick={() => choosePrompt('Check the Story Bible and current writing for consistency issues.')} />
-              <Action label="Project status" icon={<Bell className="h-4 w-4 text-emerald-300" />} onClick={() => choosePrompt('Give me a concise project status: progress, open threads, and the best next writing step.')} />
-              <p className="px-2 pt-2 text-[10px] leading-relaxed text-zinc-600">These actions only place a prompt in the co-pilot. They never call Gemini by themselves.</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <Action label="Open chat" icon={<MessageSquare className="h-4 w-4 text-sky-300" />} onClick={() => { onOpenChat(); setOpen(false) }} />
-              <Action label="Open projects" icon={<FolderOpen className="h-4 w-4 text-violet-300" />} onClick={() => { onOpenProjects(); setOpen(false) }} />
-              <p className="px-2 pt-2 text-[10px] leading-relaxed text-zinc-600">General mode never receives project text or project memory.</p>
-            </div>
-          )}
-        </section>
-      )}
-      <div className="relative flex flex-col items-end">
-      <button
-        type="button"
-        onPointerDown={beginDrag}
-        onClick={() => { if (!settings.enabled) updateSettings({ enabled: true }); setOpen((value) => !value) }}
-        style={{ '--companion-color': settings.color } as CSSProperties}
-        className={`group relative -mb-6 flex h-36 w-36 cursor-grab items-center justify-center rounded-full bg-[radial-gradient(circle_at_35%_25%,color-mix(in_srgb,var(--companion-color)_65%,white),var(--companion-color)_70%)] drop-shadow-2xl active:cursor-grabbing focus:outline-none ${reduceMotion ? '' : mood === 'thinking' ? 'animate-pulse' : mood === 'writing' ? 'lc-companion-float' : 'lc-companion-drift'}`}
-        aria-label={open ? `Close ${settings.name}` : `Open ${settings.name}, your writing companion`}
-        aria-expanded={open}
-      >
-        <ScholarSprite appearance={settings.appearance} mood={mood} color={settings.color} />
-        {notice && <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full border-2 border-zinc-950 bg-rose-400" aria-label="New companion notification" />}
-        {!settings.enabled && <span className="absolute -bottom-5 whitespace-nowrap text-[10px] text-zinc-400">Show companion</span>}
-      </button>
-      <div className="w-72 rounded-2xl border border-zinc-700/80 bg-[#1e1e24]/95 p-3 pt-8 shadow-2xl backdrop-blur-md">
-        <div className="mb-2 flex items-center justify-between border-b border-zinc-800 pb-2 text-[11px] font-mono text-zinc-400"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{settings.name} AI</span><span className={mood === 'thinking' ? 'h-3 w-3 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-200' : 'text-zinc-600'}>{mood === 'thinking' ? '' : 'ready'}</span></div>
-        <div className="flex items-center gap-2"><input value={draftPrompt} onChange={(event) => setDraftPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitPrompt() }} placeholder={isProjectWorkspace ? 'Ask your project companion…' : 'Open chat to ask…'} className="min-w-0 flex-1 bg-transparent py-1 text-xs text-zinc-100 outline-none placeholder:text-zinc-500" /><button onClick={submitPrompt} className="rounded-lg bg-zinc-800 p-1.5 text-zinc-300 hover:bg-[var(--companion-color)] hover:text-white" style={{ '--companion-color': settings.color } as CSSProperties} aria-label="Send companion prompt"><Send className="h-3.5 w-3.5" /></button></div>
-      </div>
-      {!open && settings.enabled && <p className="mt-2 max-w-64 text-right text-[10px] text-zinc-500">{statusText}</p>}
-      </div>
-    </aside>
-  )
-}
-
-function Action({ label, icon, onClick }: { label: string; icon: ReactNode; onClick: () => void }) {
-  return <button onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-xs text-zinc-300 transition hover:bg-zinc-900 hover:text-white">{icon}<span>{label}</span></button>
-}
-
-function CompanionSettings({ settings, updateSettings }: { settings: CompanionSettings; updateSettings: (update: Partial<CompanionSettings>) => void }) {
-  return <div className="space-y-3 text-xs text-zinc-300">
-    <label className="block"><span className="mb-1 block text-[10px] uppercase tracking-wide text-zinc-500">Companion name</span><input value={settings.name} maxLength={24} onChange={(event) => updateSettings({ name: event.target.value.trimStart() || 'Ink' })} className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-2 text-zinc-100 outline-none focus:border-sky-400" /></label>
-    <div><span className="mb-1 block text-[10px] uppercase tracking-wide text-zinc-500">Appearance</span><div className="grid grid-cols-2 gap-2"><Choice active={settings.appearance === 'scholar'} onClick={() => updateSettings({ appearance: 'scholar' })}>Scholar</Choice><Choice active={settings.appearance === 'scholarine'} onClick={() => updateSettings({ appearance: 'scholarine' })}>Scholarine</Choice></div></div>
-    <Toggle label="Show companion" checked={settings.enabled} onChange={(checked) => updateSettings({ enabled: checked })} />
-    <label className="block"><span className="mb-1 block text-[10px] uppercase tracking-wide text-zinc-500">Companion color</span><input aria-label="Companion color" type="color" value={settings.color} onChange={(event) => updateSettings({ color: event.target.value })} className="h-8 w-full cursor-pointer rounded border border-zinc-700 bg-zinc-900 p-1" /></label>
-    <Toggle label="Reduce animation" checked={settings.reducedMotion} onChange={(checked) => updateSettings({ reducedMotion: checked })} />
-    <button onClick={() => updateSettings(defaults)} className="w-full rounded-lg border border-zinc-700 px-2 py-2 text-[11px] text-zinc-400 hover:border-zinc-500 hover:text-white">Reset companion settings</button>
-  </div>
-}
-
-function Choice({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) { return <button onClick={onClick} className={`rounded-lg border px-2 py-2 ${active ? 'border-sky-400/60 bg-sky-500/10 text-sky-200' : 'border-zinc-700 text-zinc-400 hover:bg-zinc-900'}`}>{children}</button> }
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className="flex cursor-pointer items-center justify-between"><span>{label}</span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="accent-sky-400" /></label> }
-
-function ScholarSprite({ appearance, mood, color }: { appearance: CompanionAppearance; mood: CompanionMood; color: string }) {
-  const accent = appearance === 'scholarine' ? '#c084fc' : color
-  const face = mood === 'thinking' ? '? !' : mood === 'writing' ? '✎ …' : mood === 'celebrating' ? '^ ^' : '> _'
-  return <svg viewBox="0 0 120 120" className="h-32 w-32" aria-hidden="true"><path d="M32 70C18 69 17 51 29 43 22 29 38 16 51 25 61 13 78 17 84 26 100 19 108 36 99 47c11 12 1 25-12 22v28H33Z" fill={accent} stroke="#111827" strokeWidth="3" strokeLinejoin="round" /><rect x="36" y="37" width="48" height="31" rx="10" fill="#111827" stroke="#0b1220" strokeWidth="3" /><text x="60" y="58" textAnchor="middle" fontFamily="monospace" fontSize="16" fontWeight="bold" fill="#7dd3fc">{face}</text><rect x="43" y="76" width="35" height="25" rx="9" fill={accent} stroke="#111827" strokeWidth="3" /><text x="60" y="93" textAnchor="middle" fontFamily="monospace" fontSize="10" fontWeight="bold" fill="#bae6fd">&gt; _</text><path d="M42 82c-12 2-13 14-4 14M79 82c12 2 13 14 4 14" fill="none" stroke={accent} strokeWidth="8" strokeLinecap="round" />{appearance === 'scholarine' && <path d="M78 26c-8-8-13 5 0 3 13 2 8-11 0-3Z" fill="#f472b6" stroke="#111827" strokeWidth="1.5" />}{mood === 'writing' && <path d="m84 75 8 18" stroke="#fbbf24" strokeWidth="4" strokeLinecap="round" />}{mood === 'alert' && <circle cx="91" cy="23" r="7" fill="#fb7185" stroke="#111827" strokeWidth="2" />}</svg>
-}
+function Mascot({ appearance, mood, face, onPhone }: { appearance: 'male'|'female'; mood:Mood; face:{x:number;y:number}; onPhone:()=>void }) { const text=mood==='thinking'?'? !':mood==='writing'?'✎ …':mood==='celebrating'?'^ ^':'> _'; const color=appearance==='female'?'#c084fc':'#3b82f6'; return <svg viewBox="0 0 120 120" className="h-full w-full drop-shadow-2xl"><ellipse cx="60" cy="112" rx="30" ry="5" fill="#000" opacity=".6"/><path d="M44 100c0 8 8 8 8 0m16 0c0 8 8 8 8 0" fill={color} stroke="#111827" strokeWidth="2.5"/><path d="M38 82c-10 2-10 13-2 12m46-12c11-2 13 9 5 12" fill="none" stroke={color} strokeWidth="9" strokeLinecap="round"/><rect x="42" y="76" width="36" height="26" rx="10" fill={color} stroke="#111827" strokeWidth="2.5"/><path d="M32 68C20 68 16 52 28 42 20 30 36 16 50 24c8-10 26-10 32 0 16-6 24 8 16 22 10 10 2 25-10 22Z" fill={color} stroke="#111827" strokeWidth="3"/><rect x="36" y="36" width="48" height="32" rx="10" fill="#0b1220" stroke="#111827" strokeWidth="2.5"/><g transform={`translate(${face.x} ${face.y})`}><text x="60" y="56" textAnchor="middle" fontFamily="monospace" fontSize="16" fontWeight="bold" fill="#38bdf8">{text}</text></g>{appearance==='female'&&<path d="M78 22c-8-6-9 6 0 4 9 2 8-10 0-4Z" fill="#ec4899" stroke="#111827"/>}{mood==='writing'&&<path d="m84 75 8 18" stroke="#fbbf24" strokeWidth="4"/>}<g onClick={e=>{e.stopPropagation();onPhone()}} className="cursor-pointer"><rect x="86" y="78" width="12" height="20" rx="3" fill="#090d16" stroke="#38bdf8" strokeWidth="1.4"/><rect x="88" y="81" width="8" height="12" rx="1" fill="#0284c7"/></g></svg> }
