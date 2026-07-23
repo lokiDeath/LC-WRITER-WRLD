@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
+  try {
+
   const user = await getCurrentUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { searchParams } = new URL(req.url)
@@ -13,9 +15,15 @@ export async function GET(req: NextRequest) {
     orderBy: { updatedAt: 'desc' },
   })
   return NextResponse.json({ characters: chars })
+  } catch (err) {
+    console.error('[characters] error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+  }
 }
 
 export async function POST(req: NextRequest) {
+  try {
+
   const user = await getCurrentUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch(() => ({}))
@@ -25,4 +33,8 @@ export async function POST(req: NextRequest) {
     data: { name, alias: alias || null, role: role || 'supporting', age: age || null, birthday: birthday || null, race: race || null, cultivation: cultivation || null, powerLevel: powerLevel || null, occupation: occupation || null, appearance: appearance || '', height: height || null, weight: weight || null, hair: hair || null, eyes: eyes || null, voice: voice || null, accent: accent || null, personality: personality || '', likes: likes || null, dislikes: dislikes || null, habits: habits || null, goals: goals || null, secrets: secrets || null, background: background || '', abilities: abilities || '', qi: qi || null, mana: mana || null, aether: aether || null, arc: arc || '', quotes: quotes || null, inventory: inventory || null, skills: skills || null, magic: magic || null, notes: notes || null, portraitUrl: portraitUrl || null, authorId: user.id, novelId: novelId || null },
   })
   return NextResponse.json({ character: created })
+  } catch (err) {
+    console.error('[characters] error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+  }
 }

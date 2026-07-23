@@ -27,7 +27,7 @@ type Project = {
 type FilterOption = 'anyone' | 'me' | 'notme'
 type ModalTab = 'recent' | 'mydrive' | 'shared' | 'starred' | 'computers' | 'upload'
 
-export function ProjectsDashboard() {
+export function ProjectsDashboard({ onOpenProject }: { onOpenProject?: (id: string, name: string) => void }) {
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [projects, setProjects] = useState<Project[]>([])
@@ -89,6 +89,8 @@ export function ProjectsDashboard() {
       const item = prev.find((p) => p.id === id)
       if (!item) return prev
       const rest = prev.filter((p) => p.id !== id)
+      // Notify parent so it can mount the workspace with the real project ID.
+      onOpenProject?.(item.id, item.name)
       return [{ ...item, modified: 'Just now' }, ...rest]
     })
     setSelectedProject(id)

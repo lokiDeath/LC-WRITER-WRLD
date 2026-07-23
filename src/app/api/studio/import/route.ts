@@ -33,10 +33,10 @@ Return ONLY a JSON object with these keys (omit any that have no content in the 
 If a category has no information in the source text, omit it entirely from the JSON. Do NOT include the "full-writing" key — that is handled separately. Do NOT include markdown fences. Output ONLY the raw JSON object.`
 
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser(req)
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   try {
+    const user = await getCurrentUser(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const formData = await req.formData()
     const file = formData.get('file') as File | null
     const url = (formData.get('url') as string) || ''
@@ -87,14 +87,24 @@ export async function POST(req: NextRequest) {
       if (fname.endsWith('.txt') || fname.endsWith('.md')) {
         rawText = await file.text()
       } else if (fname.endsWith('.docx')) {
-        // Lightweight .docx text extraction — read the document.xml from the zip
-        // Without a docx-parsing library, we extract raw text heuristically
+        // Proper .docx text extraction via mammoth (parses the OOXML zip).
+        // Falls back to a regex-based heuristic if mammoth fails to load
+        // (e.g. on a serverless runtime that hasn't installed the dep yet).
         const buf = Buffer.from(await file.arrayBuffer())
-        // Strip non-text bytes crudely — this won't be perfect but gets most prose
-        const text = buf.toString('utf-8').replace(/[^\x20-\x7E\n\r]+/g, ' ')
-        // Pull sequences of readable text
-        const matches = text.match(/[A-Za-z][A-Za-z0-9 ,.;:!?"'()-]{15,}/g)
-        rawText = matches ? matches.join(' ') : ''
+        try {
+          // Dynamic import so the route still compiles if mammoth is missing
+          // at type-check time. Once deployed, Vercel's `bun install` step
+          // installs mammoth from package.json before the build runs.
+          const mammoth = await import('mammoth')
+          const result = await mammoth.extractRawText({ buffer: buf })
+          rawText = result?.value || ''
+        } catch (mammothErr) {
+          console.error('[import] mammoth failed, using heuristic:', mammothErr)
+          // Last-resort heuristic — strip non-text bytes from the raw buffer.
+          const text = buf.toString('utf-8').replace(/[^\x20-\x7E\n\r]+/g, ' ')
+          const matches = text.match(/[A-Za-z][A-Za-z0-9 ,.;:!?"'()-]{15,}/g)
+          rawText = matches ? matches.join(' ') : ''
+        }
       } else {
         // Try as text
         rawText = await file.text()

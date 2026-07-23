@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
+  try {
+
   const user = await getCurrentUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const novels = await db.novel.findMany({
@@ -13,9 +15,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     novels: novels.map((n) => ({ ...n, chapterCount: n._count.chapters })),
   })
+  } catch (err) {
+    console.error('[novels] error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+  }
 }
 
 export async function POST(req: NextRequest) {
+  try {
+
   const user = await getCurrentUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json().catch(() => ({}))
@@ -25,4 +33,8 @@ export async function POST(req: NextRequest) {
     data: { title, description: description || '', genre: genre || null, authorId: user.id },
   })
   return NextResponse.json({ novel: created })
+  } catch (err) {
+    console.error('[novels] error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+  }
 }

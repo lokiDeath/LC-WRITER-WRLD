@@ -22,8 +22,8 @@ import { cn } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────
 // NOTE: Per spec, the Main Chat MUST NOT have a model selector.
-// The model is hardcoded on the backend to gemini-1.5-flash for the
-// main chat and gemini-1.5-pro for the Project Co-Pilot. The
+// The model is hardcoded on the backend to gemini-2.0-flash for the
+// main chat and gemini-2.5-pro for the Project Co-Pilot. The
 // AIModel type is kept only for backwards compatibility with
 // callers that still pass selectedModel/onModelChange props, but
 // the dropdown UI has been removed.
@@ -390,8 +390,8 @@ export function ChatInput({
               </div>
 
               {/* NOTE: Model selector dropdown has been REMOVED per spec.
-                  The Main Chat is hardcoded to gemini-1.5-flash on the backend.
-                  The Project Co-Pilot is hardcoded to gemini-1.5-pro on the backend. */}
+                  The Main Chat is hardcoded to gemini-2.0-flash on the backend.
+                  The Project Co-Pilot is hardcoded to gemini-2.5-pro on the backend. */}
             </div>
 
             {/* Right controls */}
