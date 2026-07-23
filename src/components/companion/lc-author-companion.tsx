@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Bell, BookOpen, FolderOpen, MessageSquare, PenLine, Settings2, Sparkles, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
+import { Bell, BookOpen, FolderOpen, MessageSquare, PenLine, Send, Settings2, Sparkles, X } from 'lucide-react'
 
 type CompanionAppearance = 'scholar' | 'scholarine'
 type CompanionMood = 'idle' | 'writing' | 'thinking' | 'celebrating' | 'alert'
@@ -11,6 +11,8 @@ type CompanionSettings = {
   appearance: CompanionAppearance
   enabled: boolean
   reducedMotion: boolean
+  color: string
+  position?: { x: number; y: number }
 }
 
 type CompanionSignal = {
@@ -19,7 +21,7 @@ type CompanionSignal = {
 }
 
 const STORAGE_KEY = 'lc_author_companion_v1'
-const defaults: CompanionSettings = { name: 'Ink', appearance: 'scholar', enabled: true, reducedMotion: false }
+const defaults: CompanionSettings = { name: 'Ink', appearance: 'scholar', enabled: true, reducedMotion: false, color: '#3b82f6' }
 
 export function dispatchCompanionSignal(signal: CompanionSignal) {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent<CompanionSignal>('lc-companion-signal', { detail: signal }))
@@ -40,6 +42,8 @@ export function LCAuthorCompanion({ projectName, isProjectWorkspace, onOpenChat,
   const [mood, setMood] = useState<CompanionMood>('idle')
   const [notice, setNotice] = useState<string | null>(null)
   const [systemReducedMotion, setSystemReducedMotion] = useState(false)
+  const [draftPrompt, setDraftPrompt] = useState('')
+  const dragRef = useRef<{ offsetX: number; offsetY: number } | null>(null)
 
   useEffect(() => {
     try {
@@ -56,6 +60,31 @@ export function LCAuthorCompanion({ projectName, isProjectWorkspace, onOpenChat,
     if (!mounted) return
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)) } catch { /* optional storage */ }
   }, [mounted, settings])
+
+  useEffect(() => {
+    const refreshSettings = () => {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY)
+        if (saved) setSettings({ ...defaults, ...JSON.parse(saved) })
+      } catch { /* keep current settings */ }
+    }
+    window.addEventListener('lc-companion-settings', refreshSettings)
+    return () => window.removeEventListener('lc-companion-settings', refreshSettings)
+  }, [])
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      if (!dragRef.current) return
+      const width = Math.min(window.innerWidth - 20, 340)
+      const nextX = Math.max(8, Math.min(window.innerWidth - width - 8, event.clientX - dragRef.current.offsetX))
+      const nextY = Math.max(8, Math.min(window.innerHeight - 130, event.clientY - dragRef.current.offsetY))
+      setSettings((current) => ({ ...current, position: { x: nextX, y: nextY } }))
+    }
+    const end = () => { dragRef.current = null }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end) }
+  }, [])
 
   useEffect(() => {
     const receiveSignal = (event: Event) => {
@@ -96,10 +125,26 @@ export function LCAuthorCompanion({ projectName, isProjectWorkspace, onOpenChat,
     setOpen(false)
   }
 
+  function submitPrompt() {
+    const prompt = draftPrompt.trim()
+    if (!prompt) return
+    if (isProjectWorkspace) choosePrompt(prompt)
+    else { onOpenChat(); setNotice('Chat opened. Ask your question there.'); setOpen(false) }
+    setDraftPrompt('')
+  }
+
+  function beginDrag(event: PointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0) return
+    const rect = event.currentTarget.closest('aside')?.getBoundingClientRect()
+    if (!rect) return
+    dragRef.current = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
   if (!mounted) return null
 
   return (
-    <aside className="fixed bottom-5 right-4 z-[10020] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2 sm:bottom-7 sm:right-7" aria-label="Writing companion">
+    <aside style={settings.position ? { left: settings.position.x, top: settings.position.y } : undefined} className={`fixed ${settings.position ? '' : 'bottom-5 right-4 sm:bottom-7 sm:right-7'} z-[10020] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2`} aria-label="Writing companion">
       {notice && !open && <div role="status" className="max-w-64 rounded-xl border border-sky-400/25 bg-zinc-950/95 px-3 py-2 text-xs text-zinc-200 shadow-2xl backdrop-blur">{notice}</div>}
       {open && (
         <section className="w-[min(21rem,calc(100vw-2rem))] rounded-2xl border border-sky-400/20 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur-xl" onClick={(event) => event.stopPropagation()}>
@@ -130,18 +175,26 @@ export function LCAuthorCompanion({ projectName, isProjectWorkspace, onOpenChat,
           )}
         </section>
       )}
+      <div className="relative flex flex-col items-end">
       <button
         type="button"
+        onPointerDown={beginDrag}
         onClick={() => { if (!settings.enabled) updateSettings({ enabled: true }); setOpen((value) => !value) }}
-        className={`group relative flex h-16 w-16 items-center justify-center rounded-2xl border border-sky-300/35 bg-gradient-to-br from-sky-500/30 via-indigo-500/25 to-violet-500/35 shadow-xl shadow-sky-950/40 transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-sky-300 ${reduceMotion ? '' : mood === 'thinking' ? 'animate-pulse' : mood === 'writing' ? 'lc-companion-float' : 'lc-companion-drift'}`}
+        style={{ '--companion-color': settings.color } as CSSProperties}
+        className={`group relative -mb-6 flex h-36 w-36 cursor-grab items-center justify-center rounded-full bg-[radial-gradient(circle_at_35%_25%,color-mix(in_srgb,var(--companion-color)_65%,white),var(--companion-color)_70%)] drop-shadow-2xl active:cursor-grabbing focus:outline-none ${reduceMotion ? '' : mood === 'thinking' ? 'animate-pulse' : mood === 'writing' ? 'lc-companion-float' : 'lc-companion-drift'}`}
         aria-label={open ? `Close ${settings.name}` : `Open ${settings.name}, your writing companion`}
         aria-expanded={open}
       >
-        <ScholarSprite appearance={settings.appearance} mood={mood} />
+        <ScholarSprite appearance={settings.appearance} mood={mood} color={settings.color} />
         {notice && <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full border-2 border-zinc-950 bg-rose-400" aria-label="New companion notification" />}
         {!settings.enabled && <span className="absolute -bottom-5 whitespace-nowrap text-[10px] text-zinc-400">Show companion</span>}
       </button>
-      {!open && settings.enabled && <p className="max-w-48 text-right text-[10px] text-zinc-500 opacity-0 transition group-hover:opacity-100 sm:group-hover:opacity-100">{statusText}</p>}
+      <div className="w-72 rounded-2xl border border-zinc-700/80 bg-[#1e1e24]/95 p-3 pt-8 shadow-2xl backdrop-blur-md">
+        <div className="mb-2 flex items-center justify-between border-b border-zinc-800 pb-2 text-[11px] font-mono text-zinc-400"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{settings.name} AI</span><span className={mood === 'thinking' ? 'h-3 w-3 animate-spin rounded-full border-2 border-zinc-600 border-t-zinc-200' : 'text-zinc-600'}>{mood === 'thinking' ? '' : 'ready'}</span></div>
+        <div className="flex items-center gap-2"><input value={draftPrompt} onChange={(event) => setDraftPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitPrompt() }} placeholder={isProjectWorkspace ? 'Ask your project companion…' : 'Open chat to ask…'} className="min-w-0 flex-1 bg-transparent py-1 text-xs text-zinc-100 outline-none placeholder:text-zinc-500" /><button onClick={submitPrompt} className="rounded-lg bg-zinc-800 p-1.5 text-zinc-300 hover:bg-[var(--companion-color)] hover:text-white" style={{ '--companion-color': settings.color } as CSSProperties} aria-label="Send companion prompt"><Send className="h-3.5 w-3.5" /></button></div>
+      </div>
+      {!open && settings.enabled && <p className="mt-2 max-w-64 text-right text-[10px] text-zinc-500">{statusText}</p>}
+      </div>
     </aside>
   )
 }
@@ -155,6 +208,7 @@ function CompanionSettings({ settings, updateSettings }: { settings: CompanionSe
     <label className="block"><span className="mb-1 block text-[10px] uppercase tracking-wide text-zinc-500">Companion name</span><input value={settings.name} maxLength={24} onChange={(event) => updateSettings({ name: event.target.value.trimStart() || 'Ink' })} className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-2 text-zinc-100 outline-none focus:border-sky-400" /></label>
     <div><span className="mb-1 block text-[10px] uppercase tracking-wide text-zinc-500">Appearance</span><div className="grid grid-cols-2 gap-2"><Choice active={settings.appearance === 'scholar'} onClick={() => updateSettings({ appearance: 'scholar' })}>Scholar</Choice><Choice active={settings.appearance === 'scholarine'} onClick={() => updateSettings({ appearance: 'scholarine' })}>Scholarine</Choice></div></div>
     <Toggle label="Show companion" checked={settings.enabled} onChange={(checked) => updateSettings({ enabled: checked })} />
+    <label className="block"><span className="mb-1 block text-[10px] uppercase tracking-wide text-zinc-500">Companion color</span><input aria-label="Companion color" type="color" value={settings.color} onChange={(event) => updateSettings({ color: event.target.value })} className="h-8 w-full cursor-pointer rounded border border-zinc-700 bg-zinc-900 p-1" /></label>
     <Toggle label="Reduce animation" checked={settings.reducedMotion} onChange={(checked) => updateSettings({ reducedMotion: checked })} />
     <button onClick={() => updateSettings(defaults)} className="w-full rounded-lg border border-zinc-700 px-2 py-2 text-[11px] text-zinc-400 hover:border-zinc-500 hover:text-white">Reset companion settings</button>
   </div>
@@ -163,9 +217,8 @@ function CompanionSettings({ settings, updateSettings }: { settings: CompanionSe
 function Choice({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) { return <button onClick={onClick} className={`rounded-lg border px-2 py-2 ${active ? 'border-sky-400/60 bg-sky-500/10 text-sky-200' : 'border-zinc-700 text-zinc-400 hover:bg-zinc-900'}`}>{children}</button> }
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className="flex cursor-pointer items-center justify-between"><span>{label}</span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="accent-sky-400" /></label> }
 
-function ScholarSprite({ appearance, mood }: { appearance: CompanionAppearance; mood: CompanionMood }) {
-  const robe = appearance === 'scholar' ? '#3359a6' : '#7646a8'
-  const hair = appearance === 'scholar' ? '#172554' : '#4c1d95'
-  const thinking = mood === 'thinking' || mood === 'writing'
-  return <svg viewBox="0 0 96 96" className="h-14 w-14 drop-shadow-md" aria-hidden="true"><circle cx="48" cy="46" r="27" fill="#89b5ff" /><circle cx="48" cy="43" r="20" fill="#f2c9ae" /><path d={appearance === 'scholar' ? 'M28 42c1-18 38-22 40 1-7-6-12-7-20-7s-13 1-20 6Z' : 'M25 49c0-20 43-23 46 1-7-7-14-10-23-10S32 42 25 49Z'} fill={hair} /><rect x="25" y="60" width="46" height="27" rx="16" fill={robe} /><path d="M42 52h12" stroke="#264653" strokeWidth="2" /><circle cx="40" cy="47" r="6" fill="none" stroke="#334155" strokeWidth="2" /><circle cx="56" cy="47" r="6" fill="none" stroke="#334155" strokeWidth="2" /><path d="M46 47h4" stroke="#334155" strokeWidth="2" /><path d="M42 55q6 4 12 0" fill="none" stroke="#9a5d50" strokeWidth="1.5" />{thinking ? <path d="M31 65q7-16 15-17" fill="none" stroke="#f2c9ae" strokeWidth="4" strokeLinecap="round" /> : <><path d="M31 67q-5 7-1 12" fill="none" stroke="#f2c9ae" strokeWidth="4" strokeLinecap="round" /><path d="M65 67q7 3 6 11" fill="none" stroke="#f2c9ae" strokeWidth="4" strokeLinecap="round" /></>}<rect x="57" y="67" width="13" height="15" rx="2" fill="#d7a750" /><path d="M59 72h9M59 76h9" stroke="#8b5e19" strokeWidth="1" />{mood === 'alert' && <circle cx="73" cy="22" r="6" fill="#fb7185" />}</svg>
+function ScholarSprite({ appearance, mood, color }: { appearance: CompanionAppearance; mood: CompanionMood; color: string }) {
+  const accent = appearance === 'scholarine' ? '#c084fc' : color
+  const face = mood === 'thinking' ? '? !' : mood === 'writing' ? '✎ …' : mood === 'celebrating' ? '^ ^' : '> _'
+  return <svg viewBox="0 0 120 120" className="h-32 w-32" aria-hidden="true"><path d="M32 70C18 69 17 51 29 43 22 29 38 16 51 25 61 13 78 17 84 26 100 19 108 36 99 47c11 12 1 25-12 22v28H33Z" fill={accent} stroke="#111827" strokeWidth="3" strokeLinejoin="round" /><rect x="36" y="37" width="48" height="31" rx="10" fill="#111827" stroke="#0b1220" strokeWidth="3" /><text x="60" y="58" textAnchor="middle" fontFamily="monospace" fontSize="16" fontWeight="bold" fill="#7dd3fc">{face}</text><rect x="43" y="76" width="35" height="25" rx="9" fill={accent} stroke="#111827" strokeWidth="3" /><text x="60" y="93" textAnchor="middle" fontFamily="monospace" fontSize="10" fontWeight="bold" fill="#bae6fd">&gt; _</text><path d="M42 82c-12 2-13 14-4 14M79 82c12 2 13 14 4 14" fill="none" stroke={accent} strokeWidth="8" strokeLinecap="round" />{appearance === 'scholarine' && <path d="M78 26c-8-8-13 5 0 3 13 2 8-11 0-3Z" fill="#f472b6" stroke="#111827" strokeWidth="1.5" />}{mood === 'writing' && <path d="m84 75 8 18" stroke="#fbbf24" strokeWidth="4" strokeLinecap="round" />}{mood === 'alert' && <circle cx="91" cy="23" r="7" fill="#fb7185" stroke="#111827" strokeWidth="2" />}</svg>
 }

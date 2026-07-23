@@ -118,6 +118,7 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
   const [editorLineSpacing, setEditorLineSpacing] = useState('1.5')
   const [compactMode, setCompactMode] = useState(false)
   const [reduceMotion, setReduceMotion] = useState(false)
+  const [companionColor, setCompanionColor] = useState('#3b82f6')
   const [aiAlignment, setAiAlignment] = useState('Balanced')
   const [aiVerbosity, setAiVerbosity] = useState('Concise')
   const [globalDirectives, setGlobalDirectives] = useState('')
@@ -140,6 +141,11 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
       if (savedAccent) setAccentColor(savedAccent)
       const savedAccentTheme = localStorage.getItem('lc_accent_theme')
       if (savedAccentTheme) setAccentTheme(savedAccentTheme)
+      const savedCompanion = localStorage.getItem('lc_author_companion_v1')
+      if (savedCompanion) {
+        const parsed = JSON.parse(savedCompanion) as { color?: string }
+        if (parsed.color) setCompanionColor(parsed.color)
+      }
     } catch {
       // ignore
     }
@@ -802,6 +808,28 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
                         )}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono uppercase tracking-wider text-zinc-600 mb-2">Writing Companion Color</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={companionColor}
+                      aria-label="Writing companion color"
+                      onChange={(event) => {
+                        const color = event.target.value
+                        setCompanionColor(color)
+                        try {
+                          const current = JSON.parse(localStorage.getItem('lc_author_companion_v1') || '{}') as Record<string, unknown>
+                          localStorage.setItem('lc_author_companion_v1', JSON.stringify({ ...current, color }))
+                          window.dispatchEvent(new Event('lc-companion-settings'))
+                        } catch { /* local companion settings are optional */ }
+                      }}
+                      className="h-10 w-14 cursor-pointer rounded-lg border border-zinc-700 bg-zinc-950 p-1"
+                    />
+                    <p className="text-xs text-zinc-500">Choose any color for your floating scholar. This does not change the rest of the app theme.</p>
                   </div>
                 </div>
 
