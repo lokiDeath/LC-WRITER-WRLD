@@ -54,19 +54,32 @@ Output rules:
 // MODEL RESOLUTION
 // ─────────────────────────────────────────────────────────────
 // The `purpose` field selects the general-chat or project co-pilot model.
-type Purpose = 'main' | 'copilot'
+type Purpose = 'main' | 'copilot' | 'project-review'
+const REVIEW_TAB_KEYS = new Set([
+  'character-creation', 'world-building', 'power-system', 'timeline', 'locations',
+  'organisations', 'lore', 'plot', 'research', 'publishing', 'story-bible',
+])
 
 // Gemini 1.5 models were shut down. These stable models work with AI Studio keys.
 const MAIN_CHAT_MODEL = process.env.GEMINI_MAIN_MODEL || 'gemini-2.5-flash'
 const COPILOT_MODEL = process.env.GEMINI_COPILOT_MODEL || 'gemini-2.5-pro'
 
 function resolveModel(purpose: Purpose): string {
-  return purpose === 'copilot' ? COPILOT_MODEL : MAIN_CHAT_MODEL
+  return purpose === 'main' ? MAIN_CHAT_MODEL : COPILOT_MODEL
 }
 
 function resolveSystemPrompt(purpose: Purpose): string {
   return purpose === 'copilot' ? NOVEL_PARTNER_SYSTEM : MAIN_CHAT_SYSTEM
 }
+
+const REVIEW_SYSTEM = `You are a careful manuscript-review assistant for a private author workspace.
+
+Read the newly pasted manuscript and identify only clearly supported additions or changes that could be recorded in a project reference tab. Never invent facts, infer hidden motives, rewrite prose, or repeat existing information without a material change.
+
+Return JSON only, with this exact shape:
+{"suggestions":[{"tabKey":"character-creation|world-building|power-system|timeline|locations|organisations|lore|plot|research|publishing|story-bible","title":"short factual label","content":"a concise fact or entry to add","evidence":"short quote or precise paraphrase from the pasted manuscript","confidence":"high|medium|low"}]}
+
+Return at most 20 suggestions. If no clearly supported entries exist, return {"suggestions":[]}.`
 
 function geminiRole(role: string): 'user' | 'model' {
   return role === 'assistant' || role === 'model' ? 'model' : 'user'
@@ -191,6 +204,34 @@ async function buildProjectMemoryContext(userId: string, projectId: string) {
   return `\n\nActive project context begins.\nProject: ${project.name}\n\n${tabs}\n\nContext ends.`
 }
 
+async function buildReviewContext(userId: string, projectId: string) {
+  const project = await db.project.findFirst({
+    where: { id: projectId, ownerId: userId },
+    include: { tabs: { orderBy: { orderIndex: 'asc' } } },
+  })
+  if (!project) return null
+
+  let remaining = 24000
+  const tabs = project.tabs
+    .filter((tab) => tab.tabKey !== 'full-writing' && tab.content.trim())
+    .map((tab) => {
+      const text = tab.content.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+      const excerpt = text.slice(0, Math.min(2200, remaining))
+      remaining -= excerpt.length
+      return excerpt ? `${tab.title}:\n${excerpt}` : ''
+    })
+    .filter(Boolean)
+    .join('\n\n')
+
+  return `Existing project reference material. Use it only to avoid duplicate suggestions; do not modify it:\nProject: ${project.name}\n${tabs}`
+}
+
+function cleanReviewText(value: unknown, maxLength: number) {
+  return typeof value === 'string'
+    ? value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, maxLength)
+    : ''
+}
+
 // ─────────────────────────────────────────────────────────────
 // Multimodal message part types
 // ─────────────────────────────────────────────────────────────
@@ -254,7 +295,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}))
-    const purpose: Purpose = body.purpose === 'copilot' ? 'copilot' : 'main'
+    const purpose: Purpose = body.purpose === 'project-review' ? 'project-review' : body.purpose === 'copilot' ? 'copilot' : 'main'
     const messages = (body.messages || []) as IncomingMessage[]
     const novelId = typeof body.novelId === 'string' ? body.novelId : undefined
     const projectId = typeof body.projectId === 'string' ? body.projectId : undefined
@@ -264,6 +305,38 @@ export async function POST(req: NextRequest) {
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return streamError('No messages.', 400)
+    }
+
+    if (purpose === 'project-review') {
+      if (!projectId) return streamError('A project is required for manuscript review.', 400)
+      const manuscript = cleanReviewText(messages[messages.length - 1]?.content, 60000)
+      if (!manuscript) return streamError('There is no manuscript text to review.', 400)
+      const referenceContext = await buildReviewContext(user.id, projectId)
+      if (referenceContext === null) return streamError('Project not found.', 404)
+
+      const genAI = new GoogleGenerativeAI(API_KEY)
+      const model = genAI.getGenerativeModel({ model: resolveModel('project-review'), systemInstruction: REVIEW_SYSTEM })
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: `${referenceContext}\n\nNewly pasted manuscript to review:\n${manuscript}` }] }],
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 5000 },
+      })
+      const raw = result.response.text().trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+      let parsed: unknown
+      try { parsed = JSON.parse(raw) } catch { return streamError('The AI returned an unreadable review. Please try again.', 502) }
+      const source = parsed && typeof parsed === 'object' && Array.isArray((parsed as { suggestions?: unknown }).suggestions)
+        ? (parsed as { suggestions: unknown[] }).suggestions : []
+      const suggestions = source.slice(0, 20).flatMap((item) => {
+        if (!item || typeof item !== 'object') return []
+        const value = item as Record<string, unknown>
+        const tabKey = cleanReviewText(value.tabKey, 40)
+        const title = cleanReviewText(value.title, 160)
+        const content = cleanReviewText(value.content, 4000)
+        const evidence = cleanReviewText(value.evidence, 600)
+        const confidence = value.confidence === 'high' || value.confidence === 'medium' || value.confidence === 'low' ? value.confidence : 'low'
+        if (!REVIEW_TAB_KEYS.has(tabKey) || !title || !content || !evidence) return []
+        return [{ id: crypto.randomUUID(), tabKey, title, content, evidence, confidence }]
+      })
+      return NextResponse.json({ suggestions })
     }
 
     // Build memory context ONLY for the Co-Pilot. Main chat has no novel context.

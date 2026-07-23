@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -16,11 +16,12 @@ import {
   List, ListOrdered, Table, Image as ImageIcon, Link as LinkIcon,
   Bot, Send, Loader2, AlertTriangle, Clipboard, Pencil, Check,
   PenTool, Plus, BookOpen, Globe, Zap, Clock, MapPin, Building2,
-  Scroll, BookMarked, Search, Sparkles, Menu, Maximize2,
+  Scroll, BookMarked, Search, Sparkles, Menu, Maximize2, Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { dispatchCompanionSignal } from '@/components/companion/lc-author-companion'
+import { ReviewInbox, type ReviewSuggestion } from './ReviewInbox'
 
 // ─── 12 Core Tabs ───
 type CoreTab = {
@@ -60,6 +61,18 @@ type SceneSearchResult = {
   charOffset: number
 }
 const SLICER_CHECKPOINT_KEY = 'lc_project_slicer_checkpoint_v1'
+const REVIEW_INBOX_KEY = 'lc_project_review_inbox_v1'
+const REVIEW_TAB_KEYS = new Set(CORE_TABS.filter((tab) => tab.id !== 'full-writing').map((tab) => tab.id))
+
+function escapeReviewHtml(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
+}
+
+function reviewContentToHtml(title: string, content: string) {
+  const heading = escapeReviewHtml(title.trim() || 'Review note')
+  const paragraphs = content.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean)
+  return `<h3>${heading}</h3>${paragraphs.map((paragraph) => `<p>${escapeReviewHtml(paragraph).replace(/\n/g, '<br />')}</p>`).join('')}`
+}
 
 type ProjectWorkspaceProps = {
   projectName: string
@@ -93,6 +106,11 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved')
   const [slicerProgress, setSlicerProgress] = useState<string | null>(null)
   const [largePasteWords, setLargePasteWords] = useState<number | null>(null)
+  const [pastedReviewText, setPastedReviewText] = useState('')
+  const [reviewSuggestions, setReviewSuggestions] = useState<ReviewSuggestion[]>([])
+  const [showReviewInbox, setShowReviewInbox] = useState(false)
+  const [isReviewing, setIsReviewing] = useState(false)
+  const [reviewLoadedProjectId, setReviewLoadedProjectId] = useState<string | null>(null)
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const chapterSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const companionTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -103,9 +121,68 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const editorContainerRef = useRef<HTMLDivElement>(null)
 
   const activeTab = CORE_TABS.find((t) => t.id === activeTabId)!
+  const reviewCounts = useMemo(() => reviewSuggestions.reduce<Record<string, number>>((counts, suggestion) => {
+    counts[suggestion.tabKey] = (counts[suggestion.tabKey] || 0) + 1
+    return counts
+  }, {}), [reviewSuggestions])
 
   async function copyChatMessage(content: string) { try { await navigator.clipboard.writeText(content); toast.success('Message copied.') } catch { toast.error('Copy is not available in this browser.') } }
   function saveChatEdit(id: string) { const content = editingMessageText.trim(); if (!content) return; setMessages((previous) => previous.map((message) => message.id === id ? { ...message, content } : message)); setEditingMessageId(null) }
+
+  async function runManuscriptReview(sourceText: string) {
+    if (!projectId) { toast.error('Open a saved project before running a review.'); return }
+    const content = sourceText.trim()
+    if (!content) { toast.error('There is no pasted manuscript text to review.'); return }
+    setIsReviewing(true)
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          purpose: 'project-review',
+          projectId,
+          messages: [{ role: 'user', content: content.slice(0, 60000) }],
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data?.error || 'Review failed')
+      const next = Array.isArray(data?.suggestions) ? data.suggestions.filter((item: unknown): item is ReviewSuggestion => {
+        if (!item || typeof item !== 'object') return false
+        const suggestion = item as Partial<ReviewSuggestion>
+        return typeof suggestion.id === 'string' && REVIEW_TAB_KEYS.has(String(suggestion.tabKey)) && typeof suggestion.title === 'string' && typeof suggestion.content === 'string' && typeof suggestion.evidence === 'string' && (suggestion.confidence === 'high' || suggestion.confidence === 'medium' || suggestion.confidence === 'low')
+      }) : []
+      if (next.length === 0) { toast.info('The review did not find any clear new project entries.'); return }
+      setReviewSuggestions((current) => {
+        const known = new Set(current.map((item) => `${item.tabKey}:${item.title}:${item.content}`))
+        return [...current, ...next.filter((item) => !known.has(`${item.tabKey}:${item.title}:${item.content}`))]
+      })
+      setShowReviewInbox(true)
+      toast.success(`${next.length} review suggestion${next.length === 1 ? '' : 's'} ready for your approval.`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'The manuscript review could not be completed.')
+    } finally {
+      setIsReviewing(false)
+    }
+  }
+
+  async function approveReviewSuggestion(suggestion: ReviewSuggestion) {
+    if (!projectId || !REVIEW_TAB_KEYS.has(suggestion.tabKey)) throw new Error('Invalid review destination')
+    const previous = tabContent[suggestion.tabKey] || ''
+    const next = `${previous}${previous ? '<hr />' : ''}${reviewContentToHtml(suggestion.title, suggestion.content)}`
+    setTabContent((current) => ({ ...current, [suggestion.tabKey]: next }))
+    if (activeTabId === suggestion.tabKey) editor?.commands.setContent(next, { emitUpdate: false })
+    try {
+      const response = await fetch(`/api/projects/${projectId}/tabs/${suggestion.tabKey}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: next }),
+      })
+      if (!response.ok) throw new Error('Save failed')
+      setReviewSuggestions((current) => current.filter((item) => item.id !== suggestion.id))
+    } catch (error) {
+      setTabContent((current) => ({ ...current, [suggestion.tabKey]: previous }))
+      if (activeTabId === suggestion.tabKey) editor?.commands.setContent(previous, { emitUpdate: false })
+      throw error
+    }
+  }
 
   // ─── AI greeting + quick-action buttons (resets when project changes) ───
   useEffect(() => {
@@ -121,6 +198,26 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
     setChapters([])
     setActiveChapter(null)
   }, [projectName, projectId])
+
+  useEffect(() => {
+    setReviewLoadedProjectId(null)
+    setReviewSuggestions([])
+    if (!projectId) return
+    try {
+      const saved = window.localStorage.getItem(`${REVIEW_INBOX_KEY}:${projectId}`)
+      const parsed = saved ? JSON.parse(saved) : []
+      if (Array.isArray(parsed)) setReviewSuggestions(parsed.filter((item): item is ReviewSuggestion => item && typeof item.id === 'string' && REVIEW_TAB_KEYS.has(item.tabKey) && typeof item.title === 'string' && typeof item.content === 'string'))
+    } catch {
+      window.localStorage.removeItem(`${REVIEW_INBOX_KEY}:${projectId}`)
+    } finally {
+      setReviewLoadedProjectId(projectId)
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    if (!projectId || reviewLoadedProjectId !== projectId) return
+    window.localStorage.setItem(`${REVIEW_INBOX_KEY}:${projectId}`, JSON.stringify(reviewSuggestions))
+  }, [projectId, reviewLoadedProjectId, reviewSuggestions])
 
   useEffect(() => {
     if (!projectId) return
@@ -326,7 +423,10 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
       handlePaste: (_view, event) => {
         const text = event.clipboardData?.getData('text/plain') || ''
         const words = text.trim().split(/\s+/).filter(Boolean).length
-        if (words >= 5000) setLargePasteWords(words)
+        if (words >= 5000) {
+          setPastedReviewText(text)
+          setLargePasteWords(words)
+        }
         return false
       },
     },
@@ -757,13 +857,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
           <div className="px-3 py-3 border-b border-[#1a1a1a]">
             <div className="flex items-center justify-between mb-0.5">
               <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-600">Active Project</p>
-              <button
-                onClick={() => setSidebarCollapsed(true)}
-                className="p-1 text-zinc-600 hover:text-zinc-300 hover:bg-zinc-900 rounded transition"
-                title="Collapse sidebar"
-              >
-                <Menu className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1"><button onClick={() => setShowReviewInbox(true)} className="relative rounded p-1 text-zinc-600 transition hover:bg-zinc-900 hover:text-zinc-300" title="Open review inbox"><Inbox className="h-3.5 w-3.5" />{reviewSuggestions.length > 0 && <span className="absolute -right-1 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white">{reviewSuggestions.length > 9 ? '9+' : reviewSuggestions.length}</span>}</button><button onClick={() => setSidebarCollapsed(true)} className="rounded p-1 text-zinc-600 transition hover:bg-zinc-900 hover:text-zinc-300" title="Collapse sidebar"><Menu className="h-3.5 w-3.5" /></button></div>
             </div>
             <p className="text-[12px] text-zinc-200 truncate font-medium">{projectName}</p>
           </div>
@@ -799,6 +893,12 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                         <span className="absolute -top-3 -right-2 text-[8px] font-mono text-red-300 font-bold">
                           {missing}
                         </span>
+                      </span>
+                    )}
+                    {reviewCounts[tab.id] > 0 && (
+                      <span className="relative ml-1 flex h-2 w-2 shrink-0" title={`${reviewCounts[tab.id]} review suggestion${reviewCounts[tab.id] === 1 ? '' : 's'} pending`}>
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-purple-400 opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-purple-500" />
                       </span>
                     )}
                   </button>
@@ -1239,11 +1339,15 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
             <motion.div initial={{ scale: 0.96 }} animate={{ scale: 1 }} className="w-full max-w-md rounded-2xl border border-purple-500/30 bg-zinc-950 p-5 shadow-2xl">
               <h3 className="text-base font-semibold text-zinc-100">Large manuscript update detected</h3>
               <p className="mt-2 text-sm leading-relaxed text-zinc-400">You pasted about {largePasteWords.toLocaleString()} words into Full Writing. Would you like to prepare an AI review for new characters, powers, locations, lore, timeline events, and plot threads?</p>
-              <p className="mt-2 text-[11px] text-amber-300">The AI will not run until you send the prepared request in the co-pilot.</p>
-              <div className="mt-5 flex justify-end gap-2"><button onClick={() => setLargePasteWords(null)} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300">Not now</button><button onClick={() => { setChatInput('Review the newly pasted Full Writing. Identify only new or changed characters, powers, locations, organizations, lore, timeline events, plot threads, and Story Bible entries. Return a review list grouped by the correct project tab. Do not overwrite anything.'); setLargePasteWords(null); setTimeout(() => chatInputRef.current?.focus(), 0) }} className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-medium text-white">Prepare review</button></div>
+              <p className="mt-2 text-[11px] text-amber-300">Reviewing uses Gemini once, only after you choose Review now. Nothing is written into your project automatically.</p>
+              <div className="mt-5 flex justify-end gap-2"><button disabled={isReviewing} onClick={() => { setLargePasteWords(null); setPastedReviewText('') }} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 disabled:opacity-50">Not now</button><button disabled={isReviewing} onClick={() => { const text = pastedReviewText; setLargePasteWords(null); setPastedReviewText(''); void runManuscriptReview(text) }} className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50">{isReviewing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Review now</button></div>
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showReviewInbox && <ReviewInbox suggestions={reviewSuggestions} onApprove={approveReviewSuggestion} onReject={(id) => setReviewSuggestions((current) => current.filter((item) => item.id !== id))} onClearAll={() => setReviewSuggestions([])} onClose={() => setShowReviewInbox(false)} />}
       </AnimatePresence>
 
       {/* ═══ CHAT EXPAND MODAL ═══ */}
