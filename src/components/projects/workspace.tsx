@@ -92,6 +92,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const [showChatExpand, setShowChatExpand] = useState(false)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved')
   const [slicerProgress, setSlicerProgress] = useState<string | null>(null)
+  const [largePasteWords, setLargePasteWords] = useState<number | null>(null)
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const chapterSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const companionTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -321,6 +322,12 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
         class:
           'prose prose-invert max-w-none focus:outline-none min-h-[700px] text-zinc-200 leading-relaxed [&_h1]:text-zinc-100 [&_h1]:text-3xl [&_h1]:font-serif [&_h1]:mb-4 [&_h2]:text-zinc-100 [&_h2]:text-2xl [&_h2]:font-serif [&_h2]:mb-3 [&_p]:mb-4 [&_p]:text-zinc-300 [&_strong]:text-zinc-100 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_blockquote]:border-l-2 [&_blockquote]:border-purple-500/40 [&_blockquote]:pl-4 [&_blockquote]:italic',
         style: 'font-family: Georgia, serif; font-size: 16px; padding: 0;',
+      },
+      handlePaste: (_view, event) => {
+        const text = event.clipboardData?.getData('text/plain') || ''
+        const words = text.trim().split(/\s+/).filter(Boolean).length
+        if (words >= 5000) setLargePasteWords(words)
+        return false
       },
     },
     onUpdate: ({ editor }) => {
@@ -1223,6 +1230,19 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
               setShowChapterWizard(false)
             }}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {largePasteWords !== null && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[10030] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.96 }} animate={{ scale: 1 }} className="w-full max-w-md rounded-2xl border border-purple-500/30 bg-zinc-950 p-5 shadow-2xl">
+              <h3 className="text-base font-semibold text-zinc-100">Large manuscript update detected</h3>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-400">You pasted about {largePasteWords.toLocaleString()} words into Full Writing. Would you like to prepare an AI review for new characters, powers, locations, lore, timeline events, and plot threads?</p>
+              <p className="mt-2 text-[11px] text-amber-300">The AI will not run until you send the prepared request in the co-pilot.</p>
+              <div className="mt-5 flex justify-end gap-2"><button onClick={() => setLargePasteWords(null)} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300">Not now</button><button onClick={() => { setChatInput('Review the newly pasted Full Writing. Identify only new or changed characters, powers, locations, organizations, lore, timeline events, plot threads, and Story Bible entries. Return a review list grouped by the correct project tab. Do not overwrite anything.'); setLargePasteWords(null); setTimeout(() => chatInputRef.current?.focus(), 0) }} className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-medium text-white">Prepare review</button></div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
