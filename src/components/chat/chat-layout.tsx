@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Loader2, Sparkles } from 'lucide-react'
+import { Check, Clipboard, Loader2, Pencil, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/lib/store'
 import { ChatInput, type AIModel, type UploadedImage } from './chat-input'
@@ -41,7 +41,18 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
   const user = useApp((s) => s.user)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
   const [isListening, setIsListening] = useState(false)
+
+  async function copyMessage(content: string) {
+    try { await navigator.clipboard.writeText(content) } catch { /* browser may deny clipboard */ }
+  }
+  function saveEdit(id: string) {
+    const content = editText.trim(); if (!content) return
+    setMessages((prev) => prev.map((message) => message.id === id ? { ...message, content } : message))
+    setEditingId(null)
+  }
   const [welcomeText, setWelcomeText] = useState('')
   const [ghostText, setGhostText] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
@@ -320,7 +331,7 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
                       ))}
                     </div>
                   )}
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {editingId === msg.id ? <div className="space-y-2"><textarea value={editText} onChange={(event) => setEditText(event.target.value)} className="w-full rounded bg-black/30 p-2 text-sm text-white outline-none" /><div className="flex gap-1"><button onClick={() => saveEdit(msg.id)} className="rounded p-1 text-emerald-300 hover:bg-zinc-800" title="Save edit"><Check className="h-3.5 w-3.5" /></button><button onClick={() => setEditingId(null)} className="rounded p-1 text-zinc-400 hover:bg-zinc-800" title="Cancel edit"><X className="h-3.5 w-3.5" /></button></div></div> : <><p className="whitespace-pre-wrap">{msg.content}</p><div className="mt-2 flex justify-end gap-1 border-t border-zinc-800/60 pt-1"><button onClick={() => copyMessage(msg.content)} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Copy message"><Clipboard className="h-3.5 w-3.5" /></button><button onClick={() => { setEditingId(msg.id); setEditText(msg.content) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Edit message"><Pencil className="h-3.5 w-3.5" /></button></div></>}
                 </div>
                 {msg.role === 'user' && (
                   <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center shrink-0 mt-1">

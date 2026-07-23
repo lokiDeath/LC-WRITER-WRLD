@@ -14,7 +14,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, Palette, Highlighter,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, Table, Image as ImageIcon, Link as LinkIcon,
-  Bot, Send, Loader2, AlertTriangle,
+  Bot, Send, Loader2, AlertTriangle, Clipboard, Pencil, Check,
   PenTool, Plus, BookOpen, Globe, Zap, Clock, MapPin, Building2,
   Scroll, BookMarked, Search, Sparkles, Menu, Maximize2,
 } from 'lucide-react'
@@ -75,6 +75,8 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const [copilotWidth, setCopilotWidth] = useState(320)
   const [messages, setMessages] = useState<Message[]>([])
   const [chatInput, setChatInput] = useState('')
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingMessageText, setEditingMessageText] = useState('')
   const [sending, setSending] = useState(false)
   const [zoom, setZoom] = useState(100)
   const [sceneSearch, setSceneSearch] = useState('')
@@ -98,6 +100,9 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const editorContainerRef = useRef<HTMLDivElement>(null)
 
   const activeTab = CORE_TABS.find((t) => t.id === activeTabId)!
+
+  async function copyChatMessage(content: string) { try { await navigator.clipboard.writeText(content); toast.success('Message copied.') } catch { toast.error('Copy is not available in this browser.') } }
+  function saveChatEdit(id: string) { const content = editingMessageText.trim(); if (!content) return; setMessages((previous) => previous.map((message) => message.id === id ? { ...message, content } : message)); setEditingMessageId(null) }
 
   // ─── AI greeting + quick-action buttons (resets when project changes) ───
   useEffect(() => {
@@ -1109,7 +1114,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                       : 'bg-zinc-950 border border-[#1a1a1a] text-zinc-300 rounded-bl-sm'
                   )}
                 >
-                  {msg.content}
+                  {editingMessageId === msg.id ? <div className="space-y-1"><textarea value={editingMessageText} onChange={(event) => setEditingMessageText(event.target.value)} className="w-full rounded bg-black/30 p-2 text-[12px] text-zinc-100 outline-none" /><div className="flex gap-1"><button onClick={() => saveChatEdit(msg.id)} title="Save edit" className="p-1 text-emerald-300"><Check className="h-3 w-3" /></button><button onClick={() => setEditingMessageId(null)} title="Cancel edit" className="p-1 text-zinc-400"><X className="h-3 w-3" /></button></div></div> : <><span>{msg.content}</span><div className="mt-1 flex justify-end gap-1 border-t border-zinc-800/60 pt-1"><button onClick={() => copyChatMessage(msg.content)} title="Copy message" className="p-1 text-zinc-600 hover:text-zinc-200"><Clipboard className="h-3 w-3" /></button><button onClick={() => { setEditingMessageId(msg.id); setEditingMessageText(msg.content) }} title="Edit message" className="p-1 text-zinc-600 hover:text-zinc-200"><Pencil className="h-3 w-3" /></button></div></>}
                 </div>
               </div>
             ))}
