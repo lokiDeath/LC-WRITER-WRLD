@@ -1,6 +1,23 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@keyframes lc-companion-drift {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-7px) rotate(1deg); }
+}
+
+@keyframes lc-companion-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.lc-companion-drift { animation: lc-companion-drift 3.4s ease-in-out infinite; }
+.lc-companion-float { animation: lc-companion-float 1.7s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-companion-drift, .lc-companion-float { animation: none; }
+}
+
 /* ─────────────────────────────────────────────────────────────
    THEME ARCHITECTURE (Tailwind v4)
    ─────────────────────────────────────────────────────────────

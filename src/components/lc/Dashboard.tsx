@@ -26,6 +26,7 @@ import { CircleView } from '@/components/circle/circle-view'
 import { ProfileModal, type WriterProfile } from '@/components/profile/profile-modal'
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour'
 import { DrawingStudio } from '@/components/drawing/DrawingStudio'
+import { LCAuthorCompanion } from '@/components/companion/lc-author-companion'
 
 type NavPage = 'newchat' | 'searchchat' | 'library' | 'projects' | 'workspace' | 'guild' | 'circle' | 'drawing' | 'admin'
 
@@ -483,6 +484,13 @@ export function Dashboard() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <LCAuthorCompanion
+        projectName={activeProjectName}
+        isProjectWorkspace={activePage === 'workspace'}
+        onOpenChat={() => handleNavClick('newchat')}
+        onOpenProjects={() => handleNavClick('projects')}
+      />
 
       {/* ═══ SEARCH MODAL ═══ */}
       <SearchModal

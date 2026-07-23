@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { dispatchCompanionSignal } from '@/components/companion/lc-author-companion'
 
 // ─── 12 Core Tabs ───
 type CoreTab = {
@@ -89,9 +90,11 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved')
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const chapterSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const companionTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const dragRef = useRef<{ startX: number; startW: number } | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const editorContainerRef = useRef<HTMLDivElement>(null)
 
   const activeTab = CORE_TABS.find((t) => t.id === activeTabId)!
@@ -136,6 +139,31 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   }, [projectId])
 
   useEffect(() => {
+    const receivePrompt = (event: Event) => {
+      const prompt = (event as CustomEvent<{ prompt?: string }>).detail?.prompt
+      if (!prompt) return
+      setChatInput(prompt)
+      window.setTimeout(() => chatInputRef.current?.focus(), 0)
+    }
+    window.addEventListener('lc-companion-prompt', receivePrompt)
+    return () => window.removeEventListener('lc-companion-prompt', receivePrompt)
+  }, [])
+
+  useEffect(() => {
+    dispatchCompanionSignal({ mood: sending ? 'thinking' : 'idle' })
+  }, [sending])
+
+  useEffect(() => () => {
+    if (companionTypingTimer.current) clearTimeout(companionTypingTimer.current)
+  }, [])
+
+  function signalWriting() {
+    dispatchCompanionSignal({ mood: 'writing' })
+    if (companionTypingTimer.current) clearTimeout(companionTypingTimer.current)
+    companionTypingTimer.current = setTimeout(() => dispatchCompanionSignal({ mood: 'idle' }), 1100)
+  }
+
+  useEffect(() => {
     if (!projectId) return
     let cancelled = false
     fetch(`/api/projects/${projectId}/chat`, { cache: 'no-store' })
@@ -168,6 +196,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
         setSaveState('saved')
       } catch {
         setSaveState('error')
+        dispatchCompanionSignal({ mood: 'alert', message: 'Save failed. Your writing is still open here—please try again.' })
         toast.error('Your project could not be saved. Please try again.')
       }
     }, 700)
@@ -187,6 +216,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
         setSaveState('saved')
       } catch {
         setSaveState('error')
+        dispatchCompanionSignal({ mood: 'alert', message: 'Chapter save failed. Please try again.' })
         toast.error('Your chapter could not be saved. Please try again.')
       }
     }, 700)
@@ -290,6 +320,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
       const content = editor.getHTML()
       setTabContent((prev) => ({ ...prev, [activeTabId]: content }))
       saveTab(activeTabId, content)
+      signalWriting()
     },
   })
 
@@ -412,6 +443,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   async function handleChatSend(overrideInput?: string) {
     const text = (overrideInput ?? chatInput).trim()
     if (!text || sending) return
+    let completed = false
     const userMsg: Message = { id: `u_${Date.now()}`, role: 'user', content: text }
     setMessages((prev) => [...prev, userMsg])
     setChatInput('')
@@ -457,6 +489,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
           )
         )
       }
+      completed = true
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -467,8 +500,10 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
             'Network error reaching the AI service. Please check your connection and try again.',
         },
       ])
+      dispatchCompanionSignal({ mood: 'alert', message: 'The co-pilot request failed. Check your connection or Gemini service, then try again.' })
     } finally {
       setSending(false)
+      if (completed) dispatchCompanionSignal({ mood: 'alert', message: 'Your co-pilot response is ready.' })
     }
   }
 
@@ -995,7 +1030,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                     className="prose prose-invert max-w-none text-zinc-200 leading-relaxed min-h-[560px] focus:outline-none"
                     contentEditable
                     suppressContentEditableWarning
-                    onInput={(event) => saveChapterContent(activeChapter, event.currentTarget.innerHTML)}
+                    onInput={(event) => { saveChapterContent(activeChapter, event.currentTarget.innerHTML); signalWriting() }}
                     dangerouslySetInnerHTML={{
                       __html:
                         chapters.find((c) => c.id === activeChapter)?.content ||
@@ -1112,6 +1147,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
           <div className="shrink-0 border-t border-[#1a1a1a] p-3">
             <div className="bg-zinc-950 border border-[#1a1a1a] rounded-xl focus-within:border-zinc-800 transition">
               <textarea
+                ref={chatInputRef}
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => {
