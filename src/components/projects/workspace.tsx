@@ -59,6 +59,7 @@ type SceneSearchResult = {
   snippet: string
   charOffset: number
 }
+const SLICER_CHECKPOINT_KEY = 'lc_project_slicer_checkpoint_v1'
 
 type ProjectWorkspaceProps = {
   projectName: string
@@ -90,6 +91,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   // Expand-modal state for chat input
   const [showChatExpand, setShowChatExpand] = useState(false)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved')
+  const [slicerProgress, setSlicerProgress] = useState<string | null>(null)
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const chapterSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const companionTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -645,21 +647,32 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
       }
     }
 
-    // Append the new chapters (non-destructive — original Full Writing is untouched)
+    // Create in safe batches. A checkpoint lets a very large manuscript resume
+    // after a browser/network interruption without duplicating completed slices.
     if (projectId) {
       try {
-        const response = await fetch(`/api/projects/${projectId}/chapters`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chapters: newChapters.map((chapter) => ({ title: chapter.name, content: chapter.content })) }),
-        })
-        const data = await response.json().catch(() => ({}))
-        if (!response.ok) throw new Error(data.error || 'Unable to save chapters')
-        const persisted = (data.chapters || []).map((chapter: { id: string; title: string; content: string }) => ({
-          id: chapter.id, name: chapter.title, content: chapter.content,
-        }))
-        setChapters((prev) => [...prev, ...persisted])
+        const fingerprint = `${projectId}:${words.length}:${opts.mode}:${opts.count || opts.words || 0}`
+        const stored = localStorage.getItem(SLICER_CHECKPOINT_KEY)
+        const checkpoint = stored ? JSON.parse(stored) as { fingerprint?: string; nextIndex?: number } : {}
+        const startIndex = checkpoint.fingerprint === fingerprint ? Math.max(0, checkpoint.nextIndex || 0) : 0
+        if (startIndex > 0) toast.info(`Resuming chapter slicer from chapter ${startIndex + 1}.`)
+        const batchSize = 25
+        for (let index = startIndex; index < newChapters.length; index += batchSize) {
+          const batch = newChapters.slice(index, index + batchSize)
+          setSlicerProgress(`Creating chapters ${index + 1}-${Math.min(index + batch.length, newChapters.length)} of ${newChapters.length}…`)
+          const response = await fetch(`/api/projects/${projectId}/chapters`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chapters: batch.map((chapter) => ({ content: chapter.content })) }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data.error || 'Unable to save chapters')
+          const persisted = (data.chapters || []).map((chapter: { id: string; title: string; content: string }) => ({ id: chapter.id, name: chapter.title, content: chapter.content }))
+          setChapters((prev) => [...prev, ...persisted])
+          localStorage.setItem(SLICER_CHECKPOINT_KEY, JSON.stringify({ fingerprint, nextIndex: index + batch.length }))
+        }
+        localStorage.removeItem(SLICER_CHECKPOINT_KEY)
       } catch (err) {
+        setSlicerProgress(null)
         toast.error(err instanceof Error ? err.message : 'Unable to save chapter slices.')
         return
       }
@@ -668,6 +681,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
     }
     // Insert a visual bookmark divider where slicing ended in the Full Writing
     setImportMarker(wordCount)
+    setSlicerProgress(null)
     toast.success(
       `Sliced ${sliceCount} chapter${sliceCount !== 1 ? 's' : ''}. Original Full Writing is preserved.`
     )
@@ -1150,6 +1164,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
 
           {/* Input */}
           <div className="shrink-0 border-t border-[#1a1a1a] p-3">
+            {slicerProgress && <p className="mb-2 text-[10px] text-amber-300">{slicerProgress}</p>}
             <div className="bg-zinc-950 border border-[#1a1a1a] rounded-xl focus-within:border-zinc-800 transition">
               <textarea
                 ref={chatInputRef}
