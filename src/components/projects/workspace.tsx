@@ -87,6 +87,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   // Expand-modal state for chat input
   const [showChatExpand, setShowChatExpand] = useState(false)
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const chapterSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const dragRef = useRef<{ startX: number; startW: number } | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
@@ -166,6 +167,73 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
       }
     }, 700)
   }, [projectId])
+
+  const saveChapterContent = useCallback((chapterId: string, content: string) => {
+    setChapters((previous) => previous.map((chapter) => chapter.id === chapterId ? { ...chapter, content } : chapter))
+    if (!projectId) return
+    clearTimeout(chapterSaveTimers.current[chapterId])
+    chapterSaveTimers.current[chapterId] = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/chapters/${chapterId}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }),
+        })
+        if (!response.ok) throw new Error('Save failed')
+      } catch {
+        toast.error('Your chapter could not be saved. Please try again.')
+      }
+    }, 700)
+  }, [projectId])
+
+  async function renameActiveChapter() {
+    const chapter = chapters.find((item) => item.id === activeChapter)
+    if (!chapter || !projectId) return
+    const title = window.prompt('Chapter title:', chapter.name)?.trim()
+    if (!title || title === chapter.name) return
+    const previousTitle = chapter.name
+    setChapters((previous) => previous.map((item) => item.id === chapter.id ? { ...item, name: title } : item))
+    try {
+      const response = await fetch(`/api/projects/${projectId}/chapters/${chapter.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
+      })
+      if (!response.ok) throw new Error('Rename failed')
+    } catch {
+      setChapters((previous) => previous.map((item) => item.id === chapter.id ? { ...item, name: previousTitle } : item))
+      toast.error('Your chapter could not be renamed.')
+    }
+  }
+
+  async function deleteActiveChapter() {
+    const chapter = chapters.find((item) => item.id === activeChapter)
+    if (!chapter || !projectId || !window.confirm(`Delete "${chapter.name}"? This cannot be undone.`)) return
+    try {
+      const response = await fetch(`/api/projects/${projectId}/chapters/${chapter.id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error('Delete failed')
+      setChapters((previous) => previous.filter((item) => item.id !== chapter.id))
+      setActiveChapter(null)
+      toast.success('Chapter deleted.')
+    } catch {
+      toast.error('Your chapter could not be deleted.')
+    }
+  }
+
+  async function moveActiveChapter(direction: -1 | 1) {
+    if (!activeChapter || !projectId) return
+    const currentIndex = chapters.findIndex((item) => item.id === activeChapter)
+    const targetIndex = currentIndex + direction
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= chapters.length) return
+    const next = [...chapters]
+    ;[next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]]
+    setChapters(next)
+    try {
+      const response = await fetch(`/api/projects/${projectId}/chapters`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chapterIds: next.map((chapter) => chapter.id) }),
+      })
+      if (!response.ok) throw new Error('Reorder failed')
+    } catch {
+      setChapters(chapters)
+      toast.error('Your chapter order could not be saved.')
+    }
+  }
 
   // ─── Resizable copilot ───
   useEffect(() => {
@@ -887,6 +955,17 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                   ? chapters.find((c) => c.id === activeChapter)?.name || activeTab.name
                   : activeTab.name}
               </h2>
+              {activeChapter && (
+                <div className="flex items-center gap-1 ml-2">
+                  <span className="text-[10px] text-zinc-600 mr-1">
+                    {(chapters.find((chapter) => chapter.id === activeChapter)?.content || '').replace(/<[^>]+>/g, ' ').trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words
+                  </span>
+                  <button onClick={() => moveActiveChapter(-1)} className="px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900 rounded" title="Move chapter up">↑</button>
+                  <button onClick={() => moveActiveChapter(1)} className="px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900 rounded" title="Move chapter down">↓</button>
+                  <button onClick={renameActiveChapter} className="px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900 rounded">Rename</button>
+                  <button onClick={deleteActiveChapter} className="px-1.5 py-0.5 text-[10px] text-red-400/70 hover:text-red-300 hover:bg-red-500/10 rounded">Delete</button>
+                </div>
+              )}
             </div>
             <p className="text-[10px] text-zinc-600 hidden md:block">{activeTab.description}</p>
           </div>
@@ -896,9 +975,11 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
             {activeTabId === 'full-writing' ? (
               <div className="max-w-3xl mx-auto py-8 px-12">
                 {activeChapter ? (
-                  // Render chapter content (read-only preview; editing happens in the Full Writing tab)
                   <div
-                    className="prose prose-invert max-w-none text-zinc-200 leading-relaxed"
+                    className="prose prose-invert max-w-none text-zinc-200 leading-relaxed min-h-[560px] focus:outline-none"
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={(event) => saveChapterContent(activeChapter, event.currentTarget.innerHTML)}
                     dangerouslySetInnerHTML={{
                       __html:
                         chapters.find((c) => c.id === activeChapter)?.content ||

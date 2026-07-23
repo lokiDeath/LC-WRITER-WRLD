@@ -42,3 +42,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+// Reorders only chapters belonging to this owned project.
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params
+    const access = await verifyOwner(req, id)
+    if ('error' in access) return access.error
+    const body = await req.json().catch(() => ({}))
+    const rawChapterIds: unknown[] = Array.isArray(body.chapterIds) ? body.chapterIds : []
+    const chapterIds = rawChapterIds.filter((value): value is string => typeof value === 'string')
+    const owned = await db.projectChapter.findMany({ where: { projectId: id }, select: { id: true } })
+    if (chapterIds.length !== owned.length || new Set(chapterIds).size !== chapterIds.length || !chapterIds.every((chapterId) => owned.some((chapter) => chapter.id === chapterId))) {
+      return NextResponse.json({ error: 'Invalid chapter order' }, { status: 400 })
+    }
+    await db.$transaction(chapterIds.map((chapterId, orderIndex) => db.projectChapter.update({ where: { id: chapterId }, data: { orderIndex } })))
+    const chapters = await db.projectChapter.findMany({ where: { projectId: id }, orderBy: { orderIndex: 'asc' } })
+    return NextResponse.json({ chapters })
+  } catch (err) {
+    console.error('[project chapters PATCH] error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
