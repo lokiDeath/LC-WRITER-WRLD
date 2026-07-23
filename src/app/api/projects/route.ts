@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 
+function countWords(content: string) {
+  const text = content.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+  return text ? text.split(' ').length : 0
+}
+
 // GET /api/projects — list current user's projects
 export async function GET(req: NextRequest) {
   try {
@@ -11,10 +16,22 @@ export async function GET(req: NextRequest) {
     const projects = await db.project.findMany({
       where: { ownerId: user.id, isArchived: false },
       orderBy: { updatedAt: 'desc' },
-      include: { _count: { select: { tabs: true } } },
+      include: {
+        _count: { select: { tabs: true } },
+        tabs: { where: { tabKey: 'full-writing' }, select: { content: true } },
+        chapters: { select: { content: true } },
+      },
     })
 
-    return NextResponse.json({ projects })
+    const projectsWithStats = projects.map(({ tabs, chapters, ...project }) => {
+      // Chapter slices are copied from Full Writing. Count the master manuscript
+      // when it exists, otherwise fall back to the saved chapter total.
+      const manuscriptWords = countWords(tabs[0]?.content || '')
+      const wordCount = manuscriptWords || chapters.reduce((total, chapter) => total + countWords(chapter.content), 0)
+      return { ...project, wordCount }
+    })
+
+    return NextResponse.json({ projects: projectsWithStats })
   } catch (err) {
     console.error('[projects GET] error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

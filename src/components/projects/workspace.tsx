@@ -86,6 +86,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const [missingCounts, setMissingCounts] = useState<Record<string, number>>({})
   // Expand-modal state for chat input
   const [showChatExpand, setShowChatExpand] = useState(false)
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved')
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const chapterSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
@@ -128,6 +129,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
           name: chapter.title,
           content: chapter.content,
         })))
+        setSaveState('saved')
       })
       .catch(() => toast.error('Unable to load this project.'))
     return () => { cancelled = true }
@@ -155,6 +157,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
 
   const saveTab = useCallback((tabKey: string, content: string) => {
     if (!projectId) return
+    setSaveState('saving')
     clearTimeout(saveTimers.current[tabKey])
     saveTimers.current[tabKey] = setTimeout(async () => {
       try {
@@ -162,7 +165,9 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }),
         })
         if (!res.ok) throw new Error('Save failed')
+        setSaveState('saved')
       } catch {
+        setSaveState('error')
         toast.error('Your project could not be saved. Please try again.')
       }
     }, 700)
@@ -171,6 +176,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const saveChapterContent = useCallback((chapterId: string, content: string) => {
     setChapters((previous) => previous.map((chapter) => chapter.id === chapterId ? { ...chapter, content } : chapter))
     if (!projectId) return
+    setSaveState('saving')
     clearTimeout(chapterSaveTimers.current[chapterId])
     chapterSaveTimers.current[chapterId] = setTimeout(async () => {
       try {
@@ -178,7 +184,9 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
           method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }),
         })
         if (!response.ok) throw new Error('Save failed')
+        setSaveState('saved')
       } catch {
+        setSaveState('error')
         toast.error('Your chapter could not be saved. Please try again.')
       }
     }, 700)
@@ -967,7 +975,15 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                 </div>
               )}
             </div>
-            <p className="text-[10px] text-zinc-600 hidden md:block">{activeTab.description}</p>
+            <div className="hidden md:flex items-center gap-3 text-[10px]">
+              <p className="text-zinc-600">{activeTab.description}</p>
+              <span className={cn(
+                'font-mono',
+                saveState === 'error' ? 'text-red-400' : saveState === 'saving' ? 'text-amber-400' : 'text-emerald-500/80'
+              )}>
+                {saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : 'Saved'}
+              </span>
+            </div>
           </div>
 
           {/* Content area */}

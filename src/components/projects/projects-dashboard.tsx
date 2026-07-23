@@ -51,11 +51,11 @@ export function ProjectsDashboard({ onOpen }: { onOpen?: (project: { id: string;
       const data = await res.json()
       if (Array.isArray(data.projects)) {
         setProjects(
-          data.projects.map((p: { id: string; name: string; updatedAt: string; description?: string | null; _count?: { tabs?: number } }) => ({
+          data.projects.map((p: { id: string; name: string; updatedAt: string; wordCount?: number; description?: string | null; _count?: { tabs?: number } }) => ({
             id: p.id,
             name: p.name,
             modified: formatRelativeTime(p.updatedAt),
-            words: '0',
+            words: `${(p.wordCount || 0).toLocaleString()}`,
             offline: false,
             owner: 'me' as const,
             starred: false,
