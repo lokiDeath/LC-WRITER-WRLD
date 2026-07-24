@@ -16,7 +16,7 @@ import {
   List, ListOrdered, Table, Image as ImageIcon, Link as LinkIcon,
   Bot, Send, Loader2, AlertTriangle, Clipboard, Pencil, Check,
   PenTool, Plus, BookOpen, Globe, Zap, Clock, MapPin, Building2,
-  Scroll, BookMarked, Search, Sparkles, Menu, Maximize2, Inbox,
+  Scroll, BookMarked, Search, Sparkles, Menu, Maximize2, Inbox, RefreshCw, Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -63,6 +63,18 @@ type SceneSearchResult = {
 const SLICER_CHECKPOINT_KEY = 'lc_project_slicer_checkpoint_v1'
 const REVIEW_INBOX_KEY = 'lc_project_review_inbox_v1'
 const REVIEW_TAB_KEYS = new Set(CORE_TABS.filter((tab) => tab.id !== 'full-writing').map((tab) => tab.id))
+const MANUSCRIPT_SECTION_WORDS = 10000
+
+function fullWritingToText(html: string) {
+  return html
+    .replace(/<\/(p|div|h[1-6]|li|blockquote)>/gi, '\n\n')
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+/g, ' ')
+    .trim()
+}
 
 function escapeReviewHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;')
@@ -106,6 +118,13 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved')
   const [slicerProgress, setSlicerProgress] = useState<string | null>(null)
   const [largePasteWords, setLargePasteWords] = useState<number | null>(null)
+  const [selectedManuscriptSection, setSelectedManuscriptSection] = useState(0)
+  const [chaptersExpanded, setChaptersExpanded] = useState(true)
+  const [showAllChapters, setShowAllChapters] = useState(false)
+  const [showDeleteAllChapters, setShowDeleteAllChapters] = useState(false)
+  const [deletingChapters, setDeletingChapters] = useState<string | null>(null)
+  const [refreshTarget, setRefreshTarget] = useState<{ tabKey: string; tabName: string; savedOffset: number } | null>(null)
+  const [refreshingTabKey, setRefreshingTabKey] = useState<string | null>(null)
   const [pastedReviewText, setPastedReviewText] = useState('')
   const [reviewSuggestions, setReviewSuggestions] = useState<ReviewSuggestion[]>([])
   const [showReviewInbox, setShowReviewInbox] = useState(false)
@@ -121,6 +140,13 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const editorContainerRef = useRef<HTMLDivElement>(null)
 
   const activeTab = CORE_TABS.find((t) => t.id === activeTabId)!
+  const manuscriptWords = useMemo(() => fullWritingToText(tabContent['full-writing'] || '').split(/\s+/).filter(Boolean), [tabContent])
+  const manuscriptSections = useMemo(() => Array.from({ length: Math.ceil(manuscriptWords.length / MANUSCRIPT_SECTION_WORDS) }, (_, index) => {
+    const start = index * MANUSCRIPT_SECTION_WORDS
+    const sectionWords = manuscriptWords.slice(start, start + MANUSCRIPT_SECTION_WORDS)
+    return { index, content: sectionWords.join(' '), wordCount: sectionWords.length }
+  }), [manuscriptWords])
+  const currentManuscriptSection = manuscriptSections[selectedManuscriptSection] || null
   const reviewCounts = useMemo(() => reviewSuggestions.reduce<Record<string, number>>((counts, suggestion) => {
     counts[suggestion.tabKey] = (counts[suggestion.tabKey] || 0) + 1
     return counts
@@ -128,6 +154,78 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
 
   async function copyChatMessage(content: string) { try { await navigator.clipboard.writeText(content); toast.success('Message copied.') } catch { toast.error('Copy is not available in this browser.') } }
   function saveChatEdit(id: string) { const content = editingMessageText.trim(); if (!content) return; setMessages((previous) => previous.map((message) => message.id === id ? { ...message, content } : message)); setEditingMessageId(null) }
+
+  async function deleteAllSlicedChapters() {
+    if (!projectId || chapters.length === 0) return
+    const pending = [...chapters]
+    setShowDeleteAllChapters(false)
+    try {
+      for (let index = 0; index < pending.length; index++) {
+        const chapter = pending[index]
+        setDeletingChapters(`Deleting ${index + 1} of ${pending.length} chapters…`)
+        const response = await fetch(`/api/projects/${projectId}/chapters/${chapter.id}`, { method: 'DELETE' })
+        if (!response.ok) throw new Error(`Could not delete ${chapter.name}.`)
+        setChapters((current) => current.filter((item) => item.id !== chapter.id))
+        if (activeChapter === chapter.id) setActiveChapter(null)
+      }
+      localStorage.removeItem(SLICER_CHECKPOINT_KEY)
+      toast.success('All sliced chapters were deleted. Full Writing was preserved.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Chapter deletion stopped. Remaining chapters were kept.')
+    } finally {
+      setDeletingChapters(null)
+    }
+  }
+
+  function openTabRefresh(tabKey: string, tabName: string) {
+    if (!projectId) { toast.error('Open a saved project before refreshing a tab.'); return }
+    const savedOffset = Number(localStorage.getItem(`lc_tab_refresh_offset_v1:${projectId}:${tabKey}`) || 0)
+    setRefreshTarget({ tabKey, tabName, savedOffset: Number.isFinite(savedOffset) ? savedOffset : 0 })
+  }
+
+  async function runTabRefresh(startOffset: number) {
+    if (!refreshTarget || !projectId) return
+    const html = tabContent['full-writing'] || ''
+    const text = html.replace(/<\/(p|div|h[1-6]|li|blockquote)>/gi, '\n\n').replace(/<br\s*\/?\s*>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+    if (!text) { toast.error('Full Writing is empty.'); return }
+    const offsetKey = `lc_tab_refresh_offset_v1:${projectId}:${refreshTarget.tabKey}`
+    let offset = Math.min(Math.max(0, startOffset), text.length)
+    let completed = 0
+    const limit = 3
+    setRefreshTarget(null)
+    setRefreshingTabKey(refreshTarget.tabKey)
+    try {
+      while (offset < text.length && completed < limit) {
+        let end = Math.min(offset + 18000, text.length)
+        if (end < text.length) {
+          const paragraph = text.lastIndexOf('\n\n', end)
+          if (paragraph > offset + 4000) end = paragraph
+        }
+        const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ purpose: 'tab-refresh', projectId, tabKey: refreshTarget.tabKey, messages: [{ role: 'user', content: text.slice(offset, end) }] }) })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(data?.error || 'The tab review failed.')
+        const incoming = Array.isArray(data?.suggestions) ? data.suggestions.filter((item: unknown): item is ReviewSuggestion => {
+          if (!item || typeof item !== 'object') return false
+          const suggestion = item as Partial<ReviewSuggestion>
+          return suggestion.tabKey === refreshTarget.tabKey && typeof suggestion.id === 'string' && typeof suggestion.title === 'string' && typeof suggestion.content === 'string' && typeof suggestion.evidence === 'string' && (suggestion.confidence === 'high' || suggestion.confidence === 'medium' || suggestion.confidence === 'low')
+        }) : []
+        setReviewSuggestions((current) => {
+          const known = new Set(current.map((item) => `${item.tabKey}:${item.title}:${item.content}`.toLowerCase()))
+          return [...current, ...incoming.filter((item) => !known.has(`${item.tabKey}:${item.title}:${item.content}`.toLowerCase()))]
+        })
+        offset = end
+        completed++
+        localStorage.setItem(offsetKey, String(offset))
+      }
+      if (offset >= text.length) { localStorage.removeItem(offsetKey); toast.success(`${refreshTarget.tabName} review completed.`) }
+      else toast.info(`Reviewed ${completed} chunks. Refresh ${refreshTarget.tabName} again to continue.`)
+      setShowReviewInbox(true)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'The tab review failed.')
+    } finally {
+      setRefreshingTabKey(null)
+    }
+  }
 
   async function runManuscriptReview(sourceText: string) {
     if (!projectId) { toast.error('Open a saved project before running a review.'); return }
@@ -218,6 +316,10 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
     if (!projectId || reviewLoadedProjectId !== projectId) return
     window.localStorage.setItem(`${REVIEW_INBOX_KEY}:${projectId}`, JSON.stringify(reviewSuggestions))
   }, [projectId, reviewLoadedProjectId, reviewSuggestions])
+
+  useEffect(() => {
+    if (selectedManuscriptSection >= manuscriptSections.length) setSelectedManuscriptSection(Math.max(0, manuscriptSections.length - 1))
+  }, [selectedManuscriptSection, manuscriptSections.length])
 
   useEffect(() => {
     if (!projectId) return
@@ -575,6 +677,10 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
             content: m.content,
           })),
           projectId,
+          selectedSection: currentManuscriptSection ? {
+            number: currentManuscriptSection.index + 1,
+            content: currentManuscriptSection.content,
+          } : undefined,
         }),
       })
 
@@ -872,6 +978,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                     onClick={() => {
                       setActiveTabId(tab.id)
                       setActiveChapter(null)
+                      if (tab.id === 'full-writing') setChaptersExpanded((current) => !current)
                     }}
                     className={cn(
                       'group w-full flex items-center gap-2 px-3 py-2 text-left transition',
@@ -882,6 +989,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                   >
                     <tab.icon className="w-3.5 h-3.5 shrink-0" />
                     <span className="text-[12px] flex-1 truncate">{tab.name}</span>
+                    {tab.id === 'full-writing' && (chaptersExpanded ? <ChevronDown className="h-3 w-3 text-zinc-600" /> : <ChevronRight className="h-3 w-3 text-zinc-600" />)}
                     {/* Dynamic glowing red dot — appears only when missing > 0, hides when 0 */}
                     {missing > 0 && (
                       <span
@@ -904,15 +1012,15 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                   </button>
 
                   {/* Full Writing nested chapters */}
-                  {activeTabId === 'full-writing' && tab.id === 'full-writing' && (
+                  {tab.id === 'full-writing' && chaptersExpanded && (
                     <div className="ml-6 mt-1 mb-2 space-y-0.5">
                       {chapters.length === 0 && (
                         <p className="text-[10px] text-zinc-700 px-2 py-1 italic">No chapters yet.</p>
                       )}
-                      {chapters.map((ch) => (
+                      {(showAllChapters ? chapters : chapters.slice(0, 8)).map((ch) => (
                         <button
                           key={ch.id}
-                          onClick={() => setActiveChapter(ch.id)}
+                          onClick={() => { setActiveTabId('full-writing'); setActiveChapter(ch.id) }}
                           className={cn(
                             'w-full flex items-center gap-2 px-2 py-1 text-left transition rounded',
                             activeChapter === ch.id
@@ -924,6 +1032,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                           <span className="text-[11px]">{ch.name}</span>
                         </button>
                       ))}
+                      {chapters.length > 8 && <button onClick={() => setShowAllChapters((current) => !current)} className="w-full px-2 py-1 text-left text-[10px] text-zinc-500 hover:text-purple-300">{showAllChapters ? 'Show less' : `Show more (${chapters.length - 8})`}</button>}
                       <button
                         onClick={() => setShowChapterWizard(true)}
                         className="w-full flex items-center gap-2 px-2 py-1 text-left transition rounded text-purple-400 hover:bg-purple-500/10"
@@ -931,6 +1040,8 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                         <Plus className="w-3 h-3" />
                         <span className="text-[11px]">Slice into chapters</span>
                       </button>
+                      {chapters.length > 0 && <button onClick={() => setShowDeleteAllChapters(true)} className="w-full flex items-center gap-2 px-2 py-1 text-left transition rounded text-red-400 hover:bg-red-500/10"><Trash2 className="w-3 h-3" /><span className="text-[11px]">Delete all sliced chapters</span></button>}
+                      {deletingChapters && <p className="px-2 py-1 text-[10px] text-amber-300">{deletingChapters}</p>}
                     </div>
                   )}
                 </div>
@@ -1124,6 +1235,12 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                   ? chapters.find((c) => c.id === activeChapter)?.name || activeTab.name
                   : activeTab.name}
               </h2>
+              {activeTabId !== 'full-writing' && !activeChapter && (
+                <button onClick={() => openTabRefresh(activeTabId, activeTab.name)} disabled={refreshingTabKey !== null} title="Review Full Writing for this tab" className="inline-flex items-center gap-1 rounded border border-purple-500/25 bg-purple-500/10 px-2 py-1 text-[10px] text-purple-300 transition hover:bg-purple-500/20 disabled:opacity-50">
+                  <RefreshCw className={cn('h-3 w-3', refreshingTabKey === activeTabId && 'animate-spin')} />
+                  {refreshingTabKey === activeTabId ? 'Reviewing…' : 'Refresh tab'}
+                </button>
+              )}
               {activeChapter && (
                 <div className="flex items-center gap-1 ml-2">
                   <span className="text-[10px] text-zinc-600 mr-1">
@@ -1146,6 +1263,21 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
               </span>
             </div>
           </div>
+
+          {activeTabId === 'full-writing' && (
+            <div className="shrink-0 border-b border-[#1a1a1a] bg-zinc-950/60 px-6 py-2">
+              <div className="grid max-w-md grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 text-[10px]">
+                <span className="font-mono uppercase tracking-wider text-zinc-600">AI section</span>
+                <select value={selectedManuscriptSection} onChange={(event) => setSelectedManuscriptSection(Number(event.target.value))} disabled={manuscriptSections.length === 0} className="min-w-0 rounded border border-[#252525] bg-black px-2 py-1 text-[11px] text-zinc-200 outline-none focus:border-purple-500/60 disabled:text-zinc-600">
+                  {manuscriptSections.length === 0 ? <option value={0}>No writing yet</option> : manuscriptSections.map((section) => <option key={section.index} value={section.index}>SECTION {section.index + 1} — {section.wordCount.toLocaleString()} words</option>)}
+                </select>
+                <span className="font-mono uppercase tracking-wider text-zinc-600">Section size</span>
+                <span className="text-zinc-400">10,000 words per section</span>
+                <span className="font-mono uppercase tracking-wider text-zinc-600">Co-pilot</span>
+                <span className="text-zinc-500">Selected section is included when you message the co-pilot.</span>
+              </div>
+            </div>
+          )}
 
           {/* Content area */}
           <div className="flex-1 overflow-y-auto lc-scroll">
@@ -1344,6 +1476,14 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showDeleteAllChapters && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[10040] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setShowDeleteAllChapters(false)}><motion.div initial={{ scale: 0.96 }} animate={{ scale: 1 }} exit={{ scale: 0.96 }} onClick={(event) => event.stopPropagation()} className="w-full max-w-md rounded-2xl border border-red-500/30 bg-zinc-950 p-5 shadow-2xl"><h3 className="text-base font-semibold text-zinc-100">Delete all sliced chapters?</h3><p className="mt-2 text-sm leading-relaxed text-zinc-400">This deletes the {chapters.length} chapter copies created by the slicer. Your Full Writing manuscript will remain exactly as it is.</p><div className="mt-5 flex justify-end gap-2"><button onClick={() => setShowDeleteAllChapters(false)} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300">Cancel</button><button onClick={() => void deleteAllSlicedChapters()} className="rounded-lg bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700">Delete chapters</button></div></motion.div></motion.div>}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {refreshTarget && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[10040] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setRefreshTarget(null)}><motion.div initial={{ scale: 0.96 }} animate={{ scale: 1 }} exit={{ scale: 0.96 }} onClick={(event) => event.stopPropagation()} className="w-full max-w-md rounded-2xl border border-purple-500/30 bg-zinc-950 p-5 shadow-2xl"><h3 className="text-base font-semibold text-zinc-100">Review Full Writing for {refreshTarget.tabName}?</h3><p className="mt-2 text-sm leading-relaxed text-zinc-400">This uses Gemini credit and creates review cards only. Nothing is added to {refreshTarget.tabName} until you approve each card.</p><p className="mt-2 text-[11px] text-amber-300">For credit safety, one refresh reviews up to three manuscript chunks.</p><div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => setRefreshTarget(null)} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300">Cancel</button>{refreshTarget.savedOffset > 0 && <button onClick={() => void runTabRefresh(0)} className="rounded-lg border border-purple-500/40 px-3 py-2 text-xs text-purple-200">Restart</button>}<button onClick={() => void runTabRefresh(refreshTarget.savedOffset)} className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-medium text-white">{refreshTarget.savedOffset > 0 ? 'Continue review' : 'Start review'}</button></div></motion.div></motion.div>}
       </AnimatePresence>
 
       <AnimatePresence>

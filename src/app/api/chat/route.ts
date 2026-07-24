@@ -54,7 +54,7 @@ Output rules:
 // MODEL RESOLUTION
 // ─────────────────────────────────────────────────────────────
 // The `purpose` field selects the general-chat or project co-pilot model.
-type Purpose = 'main' | 'copilot' | 'project-review'
+type Purpose = 'main' | 'copilot' | 'project-review' | 'tab-refresh'
 const REVIEW_TAB_KEYS = new Set([
   'character-creation', 'world-building', 'power-system', 'timeline', 'locations',
   'organisations', 'lore', 'plot', 'research', 'publishing', 'story-bible',
@@ -80,6 +80,20 @@ Return JSON only, with this exact shape:
 {"suggestions":[{"tabKey":"character-creation|world-building|power-system|timeline|locations|organisations|lore|plot|research|publishing|story-bible","title":"short factual label","content":"a concise fact or entry to add","evidence":"short quote or precise paraphrase from the pasted manuscript","confidence":"high|medium|low"}]}
 
 Return at most 20 suggestions. If no clearly supported entries exist, return {"suggestions":[]}.`
+
+const TAB_REFRESH_SYSTEMS: Record<string, string> = {
+  'character-creation': 'Identify only named characters, roles, traits, relationships, goals, conflicts, and directly supported backstory.',
+  'world-building': 'Identify only setting rules, cultures, geography, governments, eras, technology, economy, and social structures.',
+  'power-system': 'Identify only powers, abilities, magic rules, costs, limitations, ranks, and resources.',
+  timeline: 'Identify only ordered events, dates, ages, durations, flashbacks, and unresolved chronology.',
+  locations: 'Identify only places, regions, buildings, realms, and directly supported characteristics.',
+  organisations: 'Identify only factions, families, sects, guilds, governments, institutions, memberships, and goals.',
+  lore: 'Identify only myths, history, legends, secrets, prophecies, and canon rules.',
+  plot: 'Identify only arcs, conflicts, turning points, mysteries, stakes, setups, and unresolved threads.',
+  research: 'Identify only real-world research needs explicitly implied by the manuscript.',
+  publishing: 'Identify only clearly supported genre, audience, market-positioning, and content-note information.',
+  'story-bible': 'Identify only high-confidence canon facts worth cross-referencing.',
+}
 
 function geminiRole(role: string): 'user' | 'model' {
   return role === 'assistant' || role === 'model' ? 'model' : 'user'
@@ -232,6 +246,50 @@ function cleanReviewText(value: unknown, maxLength: number) {
     : ''
 }
 
+async function buildTabRefreshContext(userId: string, projectId: string, tabKey: string) {
+  if (!REVIEW_TAB_KEYS.has(tabKey)) return null
+  const project = await db.project.findFirst({
+    where: { id: projectId, ownerId: userId },
+    include: { tabs: { where: { tabKey } } },
+  })
+  if (!project) return null
+  const tab = project.tabs[0]
+  return tab ? cleanReviewText(tab.content.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' '), 5000) : ''
+}
+
+async function runTabRefresh(userId: string, projectId: string, tabKey: string, manuscriptChunk: string) {
+  const existing = await buildTabRefreshContext(userId, projectId, tabKey)
+  if (existing === null) return { error: 'Project not found.' as const }
+  const focus = TAB_REFRESH_SYSTEMS[tabKey]
+  const systemInstruction = `You are a careful fiction manuscript reviewer. ${focus}
+
+Return JSON only: {"suggestions":[{"tabKey":"${tabKey}","title":"short factual label","content":"concise factual entry","evidence":"short quote or precise paraphrase","confidence":"high|medium|low"}]}.
+Return at most 20 suggestions. Do not invent facts, do not repeat the existing destination-tab material below, and do not write anything directly.
+
+Existing destination-tab material:\n${existing}`
+  const model = new GoogleGenerativeAI(API_KEY).getGenerativeModel({ model: resolveModel('copilot'), systemInstruction })
+  const result = await model.generateContent({
+    contents: [{ role: 'user', parts: [{ text: manuscriptChunk }] }],
+    generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 5000 },
+  })
+  const raw = result.response.text().trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+  let parsed: unknown
+  try { parsed = JSON.parse(raw) } catch { return { error: 'The AI returned an unreadable tab review.' as const } }
+  const source = parsed && typeof parsed === 'object' && Array.isArray((parsed as { suggestions?: unknown }).suggestions)
+    ? (parsed as { suggestions: unknown[] }).suggestions : []
+  const suggestions = source.slice(0, 20).flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const value = item as Record<string, unknown>
+    const title = cleanReviewText(value.title, 160)
+    const content = cleanReviewText(value.content, 4000)
+    const evidence = cleanReviewText(value.evidence, 600)
+    const confidence = value.confidence === 'high' || value.confidence === 'medium' || value.confidence === 'low' ? value.confidence : 'low'
+    if (!title || !content || !evidence) return []
+    return [{ id: crypto.randomUUID(), tabKey, title, content, evidence, confidence }]
+  })
+  return { suggestions }
+}
+
 // ─────────────────────────────────────────────────────────────
 // Multimodal message part types
 // ─────────────────────────────────────────────────────────────
@@ -295,16 +353,27 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}))
-    const purpose: Purpose = body.purpose === 'project-review' ? 'project-review' : body.purpose === 'copilot' ? 'copilot' : 'main'
+    const purpose: Purpose = body.purpose === 'tab-refresh' ? 'tab-refresh' : body.purpose === 'project-review' ? 'project-review' : body.purpose === 'copilot' ? 'copilot' : 'main'
     const messages = (body.messages || []) as IncomingMessage[]
     const novelId = typeof body.novelId === 'string' ? body.novelId : undefined
     const projectId = typeof body.projectId === 'string' ? body.projectId : undefined
     const sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined
+    const tabKey = typeof body.tabKey === 'string' ? body.tabKey : ''
     const modelId = resolveModel(purpose)
     const systemPrompt = resolveSystemPrompt(purpose)
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return streamError('No messages.', 400)
+    }
+
+    if (purpose === 'tab-refresh') {
+      if (!projectId) return streamError('A project is required for a tab review.', 400)
+      if (!REVIEW_TAB_KEYS.has(tabKey)) return streamError('Invalid tab destination.', 400)
+      const chunk = cleanReviewText(messages[messages.length - 1]?.content, 18000)
+      if (!chunk) return streamError('There is no manuscript text to review.', 400)
+      const result = await runTabRefresh(user.id, projectId, tabKey, chunk)
+      if ('error' in result) return streamError(result.error, 502)
+      return NextResponse.json({ suggestions: result.suggestions })
     }
 
     if (purpose === 'project-review') {
@@ -346,6 +415,12 @@ export async function POST(req: NextRequest) {
         const projectContext = await buildProjectMemoryContext(user.id, projectId)
         if (projectContext === null) return streamError('Project not found.', 404)
         memoryContext = projectContext
+        const selected = body.selectedSection
+        const sectionNumber = selected && typeof selected.number === 'number' && Number.isInteger(selected.number) && selected.number > 0 ? selected.number : null
+        const sectionContent = selected ? cleanReviewText(selected.content, 70000) : ''
+        if (sectionNumber && sectionContent) {
+          memoryContext += `\n\nSelected Full Writing section begins.\nSection ${sectionNumber} (up to 10,000 words):\n${sectionContent}\nSelected section ends.`
+        }
       } else {
         memoryContext = await buildMemoryContext(user.id, novelId, body.novelContext)
       }
