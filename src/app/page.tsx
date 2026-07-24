@@ -1,14 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useApp } from '@/lib/store'
 import { LoginScreen } from '@/components/lc/LoginScreen'
 import { Dashboard } from '@/components/lc/Dashboard'
+import { LucianIntro } from '@/components/lc/LucianIntro'
 
 export default function Home() {
   const user = useApp((s) => s.user)
   const setUser = useApp((s) => s.setUser)
   const [booting, setBooting] = useState(true)
+  const [introDone, setIntroDone] = useState(false)
+  const [introRun, setIntroRun] = useState(0)
+  const previousUser = useRef<typeof user>(user)
 
   useEffect(() => {
     let cancelled = false
@@ -31,13 +35,15 @@ export default function Home() {
     }
   }, [setUser])
 
-  if (booting || user === undefined) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-        <span className="font-serif text-2xl text-red-500 tracking-wider">L-C</span>
-      </div>
-    )
-  }
+  useLayoutEffect(() => {
+    if (previousUser.current === null && user) {
+      setIntroDone(false)
+      setIntroRun((run) => run + 1)
+    }
+    previousUser.current = user
+  }, [user])
+
+  if (booting || user === undefined || !introDone) return <LucianIntro key={introRun} onComplete={() => setIntroDone(true)} />
 
   return user ? <Dashboard /> : <LoginScreen />
 }
