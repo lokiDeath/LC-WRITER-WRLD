@@ -432,3 +432,60 @@ button, input, textarea, select, aside, header {
   transition-duration: 160ms;
   transition-timing-function: ease;
 }
+
+/* Light workspace: intentionally designed as a complete interface, not a
+   dark screen with its colours inverted. It keeps the navigation distinct,
+   reserves a calm white reading surface, and gives the prompt bar the clear
+   weight of the reference UI. */
+.light .lc-dashboard { background: #f8fafc !important; color: #1f2937 !important; }
+.light .lc-sidebar { background: #ffffff !important; border-color: #e5e7eb !important; box-shadow: 1px 0 0 rgba(15, 23, 42, .02); }
+.light .lc-main,
+.light .lc-chat-page,
+.light .lc-chat-scroll { background: #ffffff !important; }
+
+.light .lc-sidebar .bg-zinc-800,
+.light .lc-sidebar .bg-zinc-800\/50 { background-color: #f1f5f9 !important; }
+.light .lc-sidebar .text-zinc-100,
+.light .lc-sidebar .text-zinc-200,
+.light .lc-sidebar .text-zinc-300 { color: #1f2937 !important; }
+.light .lc-sidebar .text-zinc-400,
+.light .lc-sidebar .text-zinc-500 { color: #64748b !important; }
+.light .lc-sidebar .text-zinc-600,
+.light .lc-sidebar .text-zinc-700 { color: #94a3b8 !important; }
+.light .lc-sidebar .border-zinc-900 { border-color: #e5e7eb !important; }
+
+.light .lc-chat-page .text-zinc-300 { color: #334155 !important; }
+.light .lc-chat-page .text-zinc-400,
+.light .lc-chat-page .text-zinc-500 { color: #64748b !important; }
+.light .lc-chat-page .text-zinc-600,
+.light .lc-chat-page .text-zinc-700 { color: #94a3b8 !important; }
+.light .lc-chat-bubble-assistant {
+  background: #ffffff !important;
+  border-color: #e5e7eb !important;
+  color: #1f2937 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .035);
+}
+.light .lc-chat-bubble-user { background: #1f2937 !important; color: #ffffff !important; border-color: #1f2937 !important; }
+
+.light .lc-chat-composer-shell { background: linear-gradient(180deg, rgba(255,255,255,0), #ffffff 28%) !important; }
+.light .lc-chat-composer {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .10) !important;
+}
+.light .lc-chat-composer textarea { color: #1f2937 !important; }
+.light .lc-chat-composer textarea::placeholder { color: #94a3b8 !important; }
+.light .lc-chat-composer .hover\:bg-zinc-800:hover { background-color: #e2e8f0 !important; }
+.light .lc-chat-composer .text-zinc-500,
+.light .lc-chat-composer .text-zinc-600 { color: #64748b !important; }
+
+/* Modal contrast must remain readable in light mode. */
+.light .lc-logout-dialog { background: #ffffff !important; border-color: #e2e8f0 !important; box-shadow: 0 24px 60px rgba(15, 23, 42, .22) !important; }
+.light .lc-logout-dialog .text-zinc-100,
+.light .lc-logout-dialog .text-white { color: #111827 !important; }
+.light .lc-logout-dialog .text-zinc-400 { color: #64748b !important; }
+.light .lc-logout-dialog .bg-zinc-800 { background: #f8fafc !important; }
+.light .lc-logout-dialog .border-zinc-700,
+.light .lc-logout-dialog .border-zinc-600 { border-color: #d1d5db !important; }
+.light .lc-logout-dialog .bg-white { background: #111827 !important; color: #ffffff !important; }
+.light .lc-logout-dialog .bg-white.text-black { color: #ffffff !important; }

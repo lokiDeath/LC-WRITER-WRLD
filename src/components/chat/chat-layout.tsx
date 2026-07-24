@@ -302,9 +302,9 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
   }
 
   return (
-    <div className="h-full flex flex-col bg-zinc-950 relative">
+    <div className="lc-chat-page h-full flex flex-col bg-zinc-950 relative">
       {/* Chat messages area — extra top padding on mobile so it clears the hamburger button */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto lc-scroll px-4 md:px-8 pt-12 md:py-6">
+      <div ref={scrollRef} className="lc-chat-scroll flex-1 overflow-y-auto lc-scroll px-4 md:px-8 pt-12 md:py-6">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center">
             <motion.div
@@ -317,7 +317,7 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
             </motion.div>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto space-y-4">
+          <div className="max-w-4xl mx-auto space-y-5">
             {messages.map((msg) => (
               <div key={msg.id} className={cn('flex gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
                 {msg.role === 'assistant' && (
@@ -327,10 +327,10 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
                 )}
                 <div
                   className={cn(
-                    'max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed',
+                    'lc-chat-bubble max-w-[78%] px-4 py-3 rounded-2xl text-sm leading-relaxed',
                     msg.role === 'user'
-                      ? 'bg-zinc-800 text-zinc-100 rounded-br-sm'
-                      : 'bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-bl-sm'
+                      ? 'lc-chat-bubble-user bg-zinc-800 text-zinc-100 rounded-br-sm'
+                      : 'lc-chat-bubble-assistant bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-bl-sm'
                   )}
                 >
                   {/* Render attached image thumbnails for user messages */}

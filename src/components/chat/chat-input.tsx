@@ -235,10 +235,10 @@ export function ChatInput({
   const canSend = (value.trim() || uploadedImages.length > 0) && !disabled
 
   return (
-    <div className="shrink-0 px-4 md:px-8 pb-4 pt-2">
+    <div className="lc-chat-composer-shell shrink-0 px-4 md:px-8 pb-4 pt-2">
       <div className="max-w-3xl mx-auto relative">
         {/* Input container */}
-        <div className="bg-zinc-900/95 border border-zinc-800 rounded-3xl shadow-2xl focus-within:border-[var(--accent-color)] focus-within:ring-1 focus-within:ring-[var(--accent-color)] transition-[border-color,box-shadow] duration-150 relative z-[9999]">
+        <div className="lc-chat-composer bg-zinc-900/95 border border-zinc-800 rounded-3xl shadow-2xl focus-within:border-[var(--accent-color)] focus-within:ring-1 focus-within:ring-[var(--accent-color)] transition-[border-color,box-shadow] duration-150 relative z-[9999]">
           {/* Uploaded images carousel */}
           {uploadedImages.length > 0 && (
             <div className="px-3 pt-3 relative">

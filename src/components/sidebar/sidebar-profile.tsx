@@ -105,7 +105,7 @@ export function SidebarProfile({ onLogout, user }: SidebarProfileProps) {
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 10 }}
               transition={{ duration: 0.18 }}
-              className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 shadow-2xl w-full max-w-sm"
+              className="lc-logout-dialog bg-zinc-900 border border-zinc-700 rounded-xl p-6 shadow-2xl w-full max-w-sm"
               onClick={(e) => e.stopPropagation()}
             >
               <h2 className="text-zinc-100 font-bold text-lg mb-1">

@@ -224,7 +224,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="h-screen flex bg-zinc-950 text-zinc-200 overflow-hidden relative">
+    <div className="lc-dashboard h-screen flex bg-zinc-950 text-zinc-200 overflow-hidden relative">
       {/* ═══ MOBILE HAMBURGER (pinned top-left, only visible on mobile) ═══ */}
       {!mobileSidebarOpen && (
         <button
@@ -258,7 +258,7 @@ export function Dashboard() {
             exit={{ x: -280, opacity: 0 }}
             transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
             className={cn(
-              'shrink-0 bg-zinc-950 border-r border-zinc-900 flex flex-col h-screen',
+              'lc-sidebar shrink-0 bg-zinc-950 border-r border-zinc-900 flex flex-col h-screen',
               // Mobile: sidebar is hidden by default; when mobileSidebarOpen, render as fixed overlay
               'max-md:hidden',
               mobileSidebarOpen && 'max-md:flex max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[10000] max-md:w-[280px] max-md:shadow-2xl'
@@ -453,7 +453,7 @@ export function Dashboard() {
       </AnimatePresence>
 
       {/* ═══ MAIN WORKSPACE ═══ */}
-      <main className="flex-1 overflow-hidden bg-zinc-950 min-w-0 w-full">
+      <main className="lc-main flex-1 overflow-hidden bg-zinc-950 min-w-0 w-full">
         <AnimatePresence mode="sync">
           <motion.div
             key={activePage}
