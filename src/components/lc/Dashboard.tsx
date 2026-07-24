@@ -256,7 +256,7 @@ export function Dashboard() {
             initial={{ x: 0 }}
             animate={{ width: sidebarCollapsed ? 60 : 260 }}
             exit={{ x: -280, opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
             className={cn(
               'shrink-0 bg-zinc-950 border-r border-zinc-900 flex flex-col h-screen',
               // Mobile: sidebar is hidden by default; when mobileSidebarOpen, render as fixed overlay
@@ -295,8 +295,8 @@ export function Dashboard() {
 
             <nav className="flex-1 px-2 space-y-0.5 overflow-y-auto lc-scroll">
               {NAV_ITEMS.map((item) => (
+                <div key={item.id}>
                 <button
-                  key={item.id}
                   onClick={() => {
                     handleNavClick(item.id)
                   }}
@@ -312,15 +312,15 @@ export function Dashboard() {
                   <item.icon className="w-4 h-4 shrink-0" />
                   {!sidebarCollapsed && <span className="text-[13px]">{t(item.translationKey)}</span>}
                 </button>
-              ))}
-
-              {/* Active project indicator when in workspace */}
-              {activePage === 'workspace' && activeProjectName && !sidebarCollapsed && (
-                <div className="px-2.5 py-2 mt-1 rounded-lg bg-zinc-800/50">
-                  <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-600 mb-0.5">{t('activeProject')}</p>
-                  <p className="text-[12px] text-zinc-300 truncate">{activeProjectName}</p>
+                {/* Keep the active project tied to Projects, rather than placing it below Drawing Studio. */}
+                {item.id === 'projects' && activePage === 'workspace' && activeProjectName && !sidebarCollapsed && (
+                  <div className="px-2.5 py-2 mt-1 rounded-lg bg-zinc-800/50 border border-zinc-800/70">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-600 mb-0.5">{t('activeProject')}</p>
+                    <p className="text-[12px] text-zinc-300 truncate">{activeProjectName}</p>
+                  </div>
+                )}
                 </div>
-              )}
+              ))}
 
               {/* ─── RECENT CHATS SECTION ─── */}
               {!sidebarCollapsed && (
@@ -454,13 +454,13 @@ export function Dashboard() {
 
       {/* ═══ MAIN WORKSPACE ═══ */}
       <main className="flex-1 overflow-hidden bg-zinc-950 min-w-0 w-full">
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="sync">
           <motion.div
             key={activePage}
-            initial={{ opacity: 0, y: 8 }}
+            initial={{ opacity: 0, y: 3 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2 }}
+            exit={{ opacity: 0, y: -3 }}
+            transition={{ duration: 0.12 }}
             className="h-full w-full overflow-x-hidden"
           >
             {activePage === 'library' && <LibraryView />}

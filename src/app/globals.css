@@ -55,7 +55,7 @@
   --text-primary: #000000;
   --text-secondary: #525252;
   --border-color: #e4e4e7;
-  --accent-color: #8b5cf6; /* Default Shadow Purple */
+  --accent-color: #10b981; /* Default Emerald */
 
   /* Extended semantic palette (mapped to Tailwind utilities) */
   --background: #faf8f3;
@@ -101,7 +101,7 @@
   --text-primary: #fafafa;
   --text-secondary: #a1a1aa;
   --border-color: #27272a;
-  --accent-color: #8b5cf6; /* Default Shadow Purple */
+  --accent-color: #10b981; /* Default Emerald */
 
   /* Extended semantic palette */
   --background: #0a0908;
@@ -424,3 +424,11 @@
 }
 .btn-accent:hover { filter: brightness(1.1); }
 .btn-accent:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Keep the visual polish responsive: these are deliberately limited to
+   interactive surfaces, not every element on the page. */
+button, input, textarea, select, aside, header {
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-duration: 160ms;
+  transition-timing-function: ease;
+}

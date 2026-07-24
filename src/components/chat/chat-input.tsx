@@ -238,7 +238,7 @@ export function ChatInput({
     <div className="shrink-0 px-4 md:px-8 pb-4 pt-2">
       <div className="max-w-3xl mx-auto relative">
         {/* Input container */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl focus-within:border-zinc-700 transition relative z-[9999]">
+        <div className="bg-zinc-900/95 border border-zinc-800 rounded-3xl shadow-2xl focus-within:border-[var(--accent-color)] focus-within:ring-1 focus-within:ring-[var(--accent-color)] transition-[border-color,box-shadow] duration-150 relative z-[9999]">
           {/* Uploaded images carousel */}
           {uploadedImages.length > 0 && (
             <div className="px-3 pt-3 relative">
@@ -437,7 +437,7 @@ export function ChatInput({
                 className={cn(
                   'p-2 rounded-lg transition',
                   canSend
-                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    ? 'btn-accent hover:brightness-110'
                     : 'bg-zinc-800 text-zinc-700 cursor-not-allowed'
                 )}
                 title="Submit"

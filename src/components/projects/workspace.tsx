@@ -16,7 +16,7 @@ import {
   List, ListOrdered, Table, Image as ImageIcon, Link as LinkIcon,
   Bot, Send, Loader2, AlertTriangle, Clipboard, Pencil, Check,
   PenTool, Plus, BookOpen, Globe, Zap, Clock, MapPin, Building2,
-  Scroll, BookMarked, Search, Sparkles, Menu, Maximize2, Inbox, RefreshCw, Trash2,
+  Scroll, BookMarked, Search, Sparkles, Menu, Maximize2, Inbox, RefreshCw, Trash2, ThumbsDown, ThumbsUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -103,6 +103,8 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
   const [chatInput, setChatInput] = useState('')
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingMessageText, setEditingMessageText] = useState('')
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, 'up' | 'down'>>({})
   const [sending, setSending] = useState(false)
   const [zoom, setZoom] = useState(100)
   const [sceneSearch, setSceneSearch] = useState('')
@@ -152,8 +154,9 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
     return counts
   }, {}), [reviewSuggestions])
 
-  async function copyChatMessage(content: string) { try { await navigator.clipboard.writeText(content); toast.success('Message copied.') } catch { toast.error('Copy is not available in this browser.') } }
+  async function copyChatMessage(id: string, content: string) { try { await navigator.clipboard.writeText(content); setCopiedMessageId(id); window.setTimeout(() => setCopiedMessageId((current) => current === id ? null : current), 1600) } catch { toast.error('Copy is not available in this browser.') } }
   function saveChatEdit(id: string) { const content = editingMessageText.trim(); if (!content) return; setMessages((previous) => previous.map((message) => message.id === id ? { ...message, content } : message)); setEditingMessageId(null) }
+  function restoreCoPilotPrompt(messageId: string) { const index = messages.findIndex((message) => message.id === messageId); const previousUser = messages.slice(0, index).reverse().find((message) => message.role === 'user'); if (!previousUser || sending) return; setChatInput(previousUser.content); chatInputRef.current?.focus() }
 
   async function deleteAllSlicedChapters() {
     if (!projectId || chapters.length === 0) return
@@ -1367,7 +1370,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                       : 'bg-zinc-950 border border-[#1a1a1a] text-zinc-300 rounded-bl-sm'
                   )}
                 >
-                  {editingMessageId === msg.id ? <div className="space-y-1"><textarea value={editingMessageText} onChange={(event) => setEditingMessageText(event.target.value)} className="w-full rounded bg-black/30 p-2 text-[12px] text-zinc-100 outline-none" /><div className="flex gap-1"><button onClick={() => saveChatEdit(msg.id)} title="Save edit" className="p-1 text-emerald-300"><Check className="h-3 w-3" /></button><button onClick={() => setEditingMessageId(null)} title="Cancel edit" className="p-1 text-zinc-400"><X className="h-3 w-3" /></button></div></div> : <><span>{msg.content}</span><div className="mt-1 flex justify-end gap-1 border-t border-zinc-800/60 pt-1"><button onClick={() => copyChatMessage(msg.content)} title="Copy message" className="p-1 text-zinc-600 hover:text-zinc-200"><Clipboard className="h-3 w-3" /></button><button onClick={() => { setEditingMessageId(msg.id); setEditingMessageText(msg.content) }} title="Edit message" className="p-1 text-zinc-600 hover:text-zinc-200"><Pencil className="h-3 w-3" /></button></div></>}
+                  {editingMessageId === msg.id ? <div className="space-y-1"><textarea value={editingMessageText} onChange={(event) => setEditingMessageText(event.target.value)} className="w-full rounded bg-black/30 p-2 text-[12px] text-zinc-100 outline-none" /><div className="flex gap-1"><button onClick={() => saveChatEdit(msg.id)} title="Save edit" className="p-1 text-emerald-300"><Check className="h-3 w-3" /></button><button onClick={() => setEditingMessageId(null)} title="Cancel edit" className="p-1 text-zinc-400"><X className="h-3 w-3" /></button></div></div> : <><span>{msg.content}</span><div className="mt-1 flex justify-end gap-1 border-t border-zinc-800/60 pt-1"><button onClick={() => copyChatMessage(msg.id, msg.content)} title="Copy message" className="p-1 text-zinc-600 hover:text-zinc-200">{copiedMessageId === msg.id ? <Check className="h-3 w-3 text-emerald-400" /> : <Clipboard className="h-3 w-3" />}</button>{msg.role === 'assistant' && <><button onClick={() => setMessageFeedback((current) => ({ ...current, [msg.id]: 'up' }))} title="Helpful" className={cn('p-1 hover:text-zinc-200', messageFeedback[msg.id] === 'up' ? 'text-emerald-400' : 'text-zinc-600')}><ThumbsUp className="h-3 w-3" /></button><button onClick={() => setMessageFeedback((current) => ({ ...current, [msg.id]: 'down' }))} title="Not helpful" className={cn('p-1 hover:text-zinc-200', messageFeedback[msg.id] === 'down' ? 'text-red-400' : 'text-zinc-600')}><ThumbsDown className="h-3 w-3" /></button><button onClick={() => restoreCoPilotPrompt(msg.id)} title="Restore the prompt to send again" className="p-1 text-zinc-600 hover:text-zinc-200"><RefreshCw className="h-3 w-3" /></button></>}<button onClick={() => { setEditingMessageId(msg.id); setEditingMessageText(msg.content) }} title="Edit message" className="p-1 text-zinc-600 hover:text-zinc-200"><Pencil className="h-3 w-3" /></button></div></>}
                 </div>
               </div>
             ))}
@@ -1404,7 +1407,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
           {/* Input */}
           <div className="shrink-0 border-t border-[#1a1a1a] p-3">
             {slicerProgress && <p className="mb-2 text-[10px] text-amber-300">{slicerProgress}</p>}
-            <div className="bg-zinc-950 border border-[#1a1a1a] rounded-xl focus-within:border-zinc-800 transition">
+            <div className="bg-zinc-950 border border-[#1a1a1a] rounded-3xl shadow-xl focus-within:border-[var(--accent-color)] focus-within:ring-1 focus-within:ring-[var(--accent-color)] transition-[border-color,box-shadow] duration-150">
               <textarea
                 ref={chatInputRef}
                 value={chatInput}
@@ -1440,7 +1443,7 @@ export function ProjectWorkspace({ projectName, projectId }: ProjectWorkspacePro
                   className={cn(
                     'p-1.5 rounded-lg transition',
                     chatInput.trim() && !sending
-                      ? 'bg-purple-600 text-white hover:bg-purple-700'
+                      ? 'btn-accent hover:brightness-110'
                       : 'bg-zinc-900 text-zinc-700 cursor-not-allowed'
                   )}
                 >

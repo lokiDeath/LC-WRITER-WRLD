@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Clipboard, Loader2, Pencil, Sparkles, X } from 'lucide-react'
+import { Check, Clipboard, Loader2, Pencil, RefreshCw, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/lib/store'
 import { ChatInput, type AIModel, type UploadedImage } from './chat-input'
@@ -43,10 +43,16 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
   const [input, setInput] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, 'up' | 'down'>>({})
   const [isListening, setIsListening] = useState(false)
 
-  async function copyMessage(content: string) {
-    try { await navigator.clipboard.writeText(content) } catch { /* browser may deny clipboard */ }
+  async function copyMessage(id: string, content: string) {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedMessageId(id)
+      window.setTimeout(() => setCopiedMessageId((current) => current === id ? null : current), 1600)
+    } catch { /* browser may deny clipboard */ }
   }
   function saveEdit(id: string) {
     const content = editText.trim(); if (!content) return
@@ -272,6 +278,16 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
     }
   }
 
+  function restorePromptForRegeneration(messageId: string) {
+    const assistantIndex = messages.findIndex((message) => message.id === messageId)
+    const previousUser = messages.slice(0, assistantIndex).reverse().find((message) => message.role === 'user')
+    if (!previousUser || sending) return
+    // This intentionally does not call the model itself. The user sees and can
+    // adjust the restored prompt, then presses Send to spend a new AI request.
+    setInput(previousUser.content)
+    setLineCount(previousUser.content.split('\n').length)
+  }
+
   async function toggleVoice() {
     if (!isListening) {
       try {
@@ -331,7 +347,7 @@ export function ChatPage({ isFullscreen: _isFullscreen, onToggleFullscreen: _onT
                       ))}
                     </div>
                   )}
-                  {editingId === msg.id ? <div className="space-y-2"><textarea value={editText} onChange={(event) => setEditText(event.target.value)} className="w-full rounded bg-black/30 p-2 text-sm text-white outline-none" /><div className="flex gap-1"><button onClick={() => saveEdit(msg.id)} className="rounded p-1 text-emerald-300 hover:bg-zinc-800" title="Save edit"><Check className="h-3.5 w-3.5" /></button><button onClick={() => setEditingId(null)} className="rounded p-1 text-zinc-400 hover:bg-zinc-800" title="Cancel edit"><X className="h-3.5 w-3.5" /></button></div></div> : <><p className="whitespace-pre-wrap">{msg.content}</p><div className="mt-2 flex justify-end gap-1 border-t border-zinc-800/60 pt-1"><button onClick={() => copyMessage(msg.content)} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Copy message"><Clipboard className="h-3.5 w-3.5" /></button><button onClick={() => { setEditingId(msg.id); setEditText(msg.content) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Edit message"><Pencil className="h-3.5 w-3.5" /></button></div></>}
+                  {editingId === msg.id ? <div className="space-y-2"><textarea value={editText} onChange={(event) => setEditText(event.target.value)} className="w-full rounded bg-black/30 p-2 text-sm text-white outline-none" /><div className="flex gap-1"><button onClick={() => saveEdit(msg.id)} className="rounded p-1 text-emerald-300 hover:bg-zinc-800" title="Save edit"><Check className="h-3.5 w-3.5" /></button><button onClick={() => setEditingId(null)} className="rounded p-1 text-zinc-400 hover:bg-zinc-800" title="Cancel edit"><X className="h-3.5 w-3.5" /></button></div></div> : <><p className="whitespace-pre-wrap">{msg.content}</p><div className="mt-2 flex justify-end gap-1 border-t border-zinc-800/60 pt-1"><button onClick={() => copyMessage(msg.id, msg.content)} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Copy message">{copiedMessageId === msg.id ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Clipboard className="h-3.5 w-3.5" />}</button>{msg.role === 'assistant' && <><button onClick={() => setMessageFeedback((current) => ({ ...current, [msg.id]: 'up' }))} className={cn('rounded p-1 hover:bg-zinc-800', messageFeedback[msg.id] === 'up' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-200')} title="Helpful"><ThumbsUp className="h-3.5 w-3.5" /></button><button onClick={() => setMessageFeedback((current) => ({ ...current, [msg.id]: 'down' }))} className={cn('rounded p-1 hover:bg-zinc-800', messageFeedback[msg.id] === 'down' ? 'text-red-400' : 'text-zinc-500 hover:text-zinc-200')} title="Not helpful"><ThumbsDown className="h-3.5 w-3.5" /></button><button onClick={() => restorePromptForRegeneration(msg.id)} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Restore the prompt to send again"><RefreshCw className="h-3.5 w-3.5" /></button></>}<button onClick={() => { setEditingId(msg.id); setEditText(msg.content) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200" title="Edit message"><Pencil className="h-3.5 w-3.5" /></button></div></>}
                 </div>
                 {msg.role === 'user' && (
                   <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center shrink-0 mt-1">

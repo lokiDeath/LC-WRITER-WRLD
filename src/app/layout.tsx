@@ -44,9 +44,11 @@ export default function RootLayout({
   // based on the saved `lc_theme` localStorage value. It also restores the
   // saved accent color via setProperty('--accent-color', hex).
   const themeBootstrap = `(function(){try{
-    var t=localStorage.getItem('lc_theme');
+    var t=localStorage.getItem('lc_theme')||'system';
     var root=document.documentElement;
-    if(t==='light'){root.classList.remove('dark');root.classList.add('light');}
+    var light=t==='light'||(t==='system'&&window.matchMedia('(prefers-color-scheme: light)').matches);
+    root.dataset.themeMode=t;
+    if(light){root.classList.remove('dark');root.classList.add('light');}
     else{root.classList.remove('light');root.classList.add('dark');}
     var a=localStorage.getItem('lc_accent_color_hex');
     if(a){root.style.setProperty('--accent-color',a);}

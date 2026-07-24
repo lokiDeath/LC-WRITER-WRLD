@@ -49,11 +49,10 @@ const ACCENT_THEMES = [
 ]
 
 const ACCENT_COLORS_GENERAL = [
-  { id: 'default', name: 'Default', color: '#c9a96e' },
-  { id: 'shadow-purple', name: 'Purple', color: '#8b5cf6' },
-  { id: 'blood-red', name: 'Red', color: '#dc2626' },
-  { id: 'plague-green', name: 'Green', color: '#10b981' },
-  { id: 'abyssal-blue', name: 'Blue', color: '#2563eb' },
+  { id: 'emerald', name: 'Emerald', color: '#10b981' },
+  { id: 'blue', name: 'Blue', color: '#3b82f6' },
+  { id: 'purple', name: 'Purple', color: '#8b5cf6' },
+  { id: 'slate', name: 'Slate', color: '#64748b' },
 ]
 
 const NOTIF_CATEGORIES = [
@@ -90,8 +89,8 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
   const [loadingAscension, setLoadingAscension] = useState(true)
 
   // ─── Settings state ───
-  const [appearance, setAppearance] = useState<'Default' | 'Dark' | 'Light'>('Dark')
-  const [accentColor, setAccentColor] = useState('default')
+  const [appearance, setAppearance] = useState<'System' | 'Dark' | 'Light'>('System')
+  const [accentColor, setAccentColor] = useState('emerald')
   const [appLanguage, setAppLanguage] = useState('English (US)')
   const [startupBehavior, setStartupBehavior] = useState('Open last active Hub/DM')
   const [sendWithEnter, setSendWithEnter] = useState(true)
@@ -135,7 +134,7 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
       if (saved === 'light' || saved === 'dark') {
         setAppearance(saved.charAt(0).toUpperCase() + saved.slice(1) as 'Dark' | 'Light')
       } else {
-        setAppearance('Default')
+        setAppearance('System')
       }
       const savedAccent = localStorage.getItem('lc_accent_color')
       if (savedAccent) setAccentColor(savedAccent)
@@ -184,10 +183,11 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
   }, [])
 
   // ─── Apply appearance changes to the root <html> element ───
-  const applyAppearance = useCallback((mode: 'Default' | 'Dark' | 'Light') => {
+  const applyAppearance = useCallback((mode: 'System' | 'Dark' | 'Light') => {
     setAppearance(mode)
     try {
       const root = document.documentElement
+      root.dataset.themeMode = mode.toLowerCase()
       if (mode === 'Light') {
         root.classList.remove('dark')
         root.classList.add('light')
@@ -197,7 +197,7 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
         root.classList.add('dark')
         localStorage.setItem('lc_theme', 'dark')
       } else {
-        // Default = system preference
+        // System follows the device preference.
         const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches
         if (prefersLight) {
           root.classList.remove('dark')
@@ -206,7 +206,7 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
           root.classList.remove('light')
           root.classList.add('dark')
         }
-        localStorage.removeItem('lc_theme')
+        localStorage.setItem('lc_theme', 'system')
       }
     } catch {
       // ignore
@@ -382,10 +382,10 @@ export function SettingsModal({ onClose, activeAccount, onLogout, onUpdateAccoun
                 <SettingRow label="Appearance">
                   <select
                     value={appearance}
-                    onChange={(e) => applyAppearance(e.target.value as 'Default' | 'Dark' | 'Light')}
+                    onChange={(e) => applyAppearance(e.target.value as 'System' | 'Dark' | 'Light')}
                     className="bg-zinc-950 border border-[#1a1a1a] px-3 py-1.5 text-xs text-zinc-200 rounded-lg focus:outline-none focus:border-zinc-700"
                   >
-                    <option>Default</option>
+                    <option>System</option>
                     <option>Dark</option>
                     <option>Light</option>
                   </select>
